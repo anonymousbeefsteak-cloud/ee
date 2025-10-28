@@ -44,72 +44,54 @@
             transform: scale(0.95);
             opacity: 0.8;
         }
-        .fullscreen-image-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.95);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-            padding: 20px;
-        }
-        .fullscreen-image-modal img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-        }
-        .fullscreen-image-modal button {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-            border: none;
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            font-size: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            backdrop-filter: blur(10px);
-        }
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <div class="min-h-screen flex items-center justify-center p-4">
+            <div class="text-center">
+                <div class="text-6xl mb-4">⏳</div>
+                <p class="text-gray-600">載入訂餐功能中...</p>
+            </div>
+        </div>
+    </div>
+
     <script type="text/babel">
         const { useState, useCallback, useEffect, useMemo } = React;
 
-        // 配置 - 請更新為您的實際資訊
-       // 配置 - 從環境變數讀取
-const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID;
-const API_ENDPOINT = process.env.NEXT_PUBLIC_API_ENDPOINT;
-const DELIVERY_FEE = 30;
+        // 配置 - 從環境變數讀取，確保敏感資訊不暴露
+        const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID;
+        const API_ENDPOINT = process.env.NEXT_PUBLIC_API_ENDPOINT;
+        const DELIVERY_FEE = 30;
+
+        // 環境變數檢查
+        if (!LIFF_ID || !API_ENDPOINT) {
+            console.warn('環境變數未正確設定，請檢查 Vercel 環境變數設定');
+        }
 
         // 默認菜單
         const DEFAULT_MENU = [
-            { name: '滷肉飯', price: 35, icon: '🍚', status: '供應中', image: 'https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=400&h=300&fit=crop' },
-            { name: '雞肉飯', price: 40, icon: '🍗', status: '供應中', image: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=400&h=300&fit=crop' },
-            { name: '蚵仔煎', price: 65, icon: '🍳', status: '供應中', image: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=400&h=300&fit=crop' },
-            { name: '大腸麵線', price: 50, icon: '🍜', status: '供應中', image: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=300&fit=crop' },
-            { name: '珍珠奶茶', price: 45, icon: '🥤', status: '供應中', image: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=400&h=300&fit=crop' }
+            { name: '滷肉飯', price: 35, icon: '🍚', status: '供應中' },
+            { name: '雞肉飯', price: 40, icon: '🍗', status: '供應中' },
+            { name: '蚵仔煎', price: 65, icon: '🍳', status: '供應中' },
+            { name: '大腸麵線', price: 50, icon: '🍜', status: '供應中' },
+            { name: '珍珠奶茶', price: 45, icon: '🥤', status: '供應中' }
         ];
 
         // API 服務
         const apiService = {
             async request(payload) {
                 try {
-                    console.log('發送請求:', payload.action);
+                    console.log('發送請求到 Google Sheets:', payload);
+                    
+                    if (!API_ENDPOINT) {
+                        throw new Error('API 端點未設定');
+                    }
+                    
                     const response = await fetch(API_ENDPOINT, {
                         method: 'POST',
                         headers: { 
-                            'Content-Type': 'text/plain;charset=utf-8',
+                            'Content-Type': 'application/json',
                         },
                         body: JSON.stringify(payload)
                     });
@@ -119,11 +101,11 @@ const DELIVERY_FEE = 30;
                     }
                     
                     const result = await response.json();
-                    console.log('收到回應:', result);
+                    console.log('Google Sheets 回應:', result);
                     return result;
                 } catch (error) {
                     console.error('API 請求失敗:', error);
-                    throw new Error('網路連線失敗，請檢查網路連線和伺服器狀態');
+                    throw new Error('網路連線失敗，請檢查網路連線');
                 }
             },
 
@@ -140,54 +122,67 @@ const DELIVERY_FEE = 30;
                 }
             },
             
-            async submitOrder(orderData, idToken) {
-                // 確保電話號碼保持原樣，不進行任何轉換
-                const orderDataForServer = {
-                    customerName: orderData.customerName.trim(),
-                    customerPhone: orderData.customerPhone.trim(), // 保持原樣 0936220000
-                    items: orderData.items.map(item => ({ 
-                        name: item.name, 
-                        quantity: item.quantity,
-                        price: item.price 
-                    })),
-                    pickupTime: orderData.pickupTime,
-                    deliveryAddress: orderData.deliveryAddress.trim(),
-                    notes: orderData.notes.trim()
-                };
+            async submitOrder(orderData) {
+                try {
+                    const orderDataForServer = {
+                        action: 'createOrder',
+                        customerName: orderData.customerName.trim(),
+                        customerPhone: orderData.customerPhone.trim(),
+                        items: orderData.items.map(item => `${item.name} x${item.quantity}`).join(', '),
+                        itemsDetail: orderData.items.map(item => ({
+                            name: item.name,
+                            quantity: item.quantity,
+                            price: item.price
+                        })),
+                        totalAmount: orderData.totalAmount,
+                        pickupTime: orderData.pickupTime,
+                        deliveryAddress: orderData.deliveryAddress.trim(),
+                        notes: orderData.notes.trim(),
+                        orderId: 'ORD_' + Date.now()
+                    };
 
-                console.log('提交訂單數據:', orderDataForServer);
+                    console.log('提交訂單數據到 Google Sheets:', orderDataForServer);
 
-                const result = await this.request({ 
-                    action: 'createOrder', 
-                    idToken: idToken,
-                    orderData: orderDataForServer 
-                });
+                    const result = await this.request(orderDataForServer);
 
-                if (!result.success) {
-                    throw new Error(result.message || '訂單提交失敗');
+                    if (!result.success) {
+                        throw new Error(result.message || '訂單提交失敗');
+                    }
+
+                    return {
+                        ...result,
+                        data: {
+                            orderId: orderDataForServer.orderId,
+                            totalAmount: orderData.totalAmount
+                        }
+                    };
+                } catch (error) {
+                    console.error('提交訂單到 Google Sheets 失敗:', error);
+                    throw error;
                 }
-
-                return result;
             },
 
             async getOrders(params) {
-                // 搜尋時也使用原始電話號碼進行精確匹配
-                const searchParams = {
-                    ...params,
-                    customerPhone: params.customerPhone ? params.customerPhone.trim() : '', // 保持原樣
-                    exactMatch: true
-                };
+                try {
+                    const searchParams = {
+                        action: 'getOrders',
+                        customerName: params.customerName.trim(),
+                        customerPhone: params.customerPhone ? params.customerPhone.trim() : '',
+                        startDate: params.startDate,
+                        endDate: params.endDate
+                    };
 
-                const result = await this.request({ 
-                    action: 'getOrders', 
-                    ...searchParams 
-                });
+                    const result = await this.request(searchParams);
 
-                if (!result.success) {
-                    throw new Error(result.message || '查詢失敗');
+                    if (!result.success) {
+                        throw new Error(result.message || '查詢失敗');
+                    }
+
+                    return result.data || [];
+                } catch (error) {
+                    console.error('查詢訂單失敗:', error);
+                    throw error;
                 }
-
-                return result.data || [];
             }
         };
 
@@ -202,7 +197,15 @@ const DELIVERY_FEE = 30;
             useEffect(() => {
                 const initializeLiff = async () => {
                     try {
+                        if (!LIFF_ID) {
+                            setLiffStatus('⚠️ LINE 功能未設定，請檢查環境變數');
+                            setStatusType('warning');
+                            return;
+                        }
+
+                        console.log('正在初始化 LINE LIFF...');
                         await liff.init({ liffId: LIFF_ID });
+                        
                         if (liff.isLoggedIn()) {
                             setIsLoggedIn(true);
                             const [userProfile, token] = await Promise.all([
@@ -214,13 +217,8 @@ const DELIVERY_FEE = 30;
                             setLiffStatus(`👋 歡迎，${userProfile.displayName}！`);
                             setStatusType('success');
                         } else {
-                            if (liff.isInClient()) {
-                                setLiffStatus('未登入 LINE，正在嘗試登入...');
-                                liff.login();
-                            } else {
-                                setLiffStatus('請在 LINE App 中開啟以獲得完整功能。');
-                                setStatusType('warning');
-                            }
+                            setLiffStatus('請在 LINE App 中開啟以獲得完整功能。');
+                            setStatusType('warning');
                         }
                     } catch (error) {
                         console.warn('LINE 初始化失敗:', error);
@@ -241,12 +239,28 @@ const DELIVERY_FEE = 30;
         };
 
         // 加載動畫組件
-        const LoadingSpinner = () => (
-            <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-        );
+        const LoadingSpinner = () => {
+            return React.createElement('svg', {
+                className: 'animate-spin -ml-1 mr-3 h-5 w-5',
+                xmlns: 'http://www.w3.org/2000/svg',
+                fill: 'none',
+                viewBox: '0 0 24 24'
+            },
+                React.createElement('circle', {
+                    className: 'opacity-25',
+                    cx: '12',
+                    cy: '12',
+                    r: '10',
+                    stroke: 'currentColor',
+                    strokeWidth: '4'
+                }),
+                React.createElement('path', {
+                    className: 'opacity-75',
+                    fill: 'currentColor',
+                    d: 'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
+                })
+            );
+        };
 
         // 通知組件
         const Notification = ({ message, type, visible, onClose }) => {
@@ -266,87 +280,56 @@ const DELIVERY_FEE = 30;
                 info: "bg-blue-500 text-white"
             };
             
-            return (
-                <div className={`fixed top-5 right-5 max-w-sm p-4 rounded-lg shadow-lg z-50 animate-slide-in ${typeClasses[type]}`}>
-                    <div className="flex justify-between items-center">
-                        <p className="text-sm font-medium whitespace-pre-wrap">{message}</p>
-                        <button onClick={onClose} className="ml-4 text-xl font-bold leading-none">&times;</button>
-                    </div>
-                </div>
-            );
-        };
-
-        // 全螢幕圖片模態框組件
-        const FullscreenImageModal = ({ imageUrl, isOpen, onClose }) => {
-            if (!isOpen) return null;
-
-            return (
-                <div className="fullscreen-image-modal animate-fade-in">
-                    <button onClick={onClose} className="clickable-btn">✕</button>
-                    <img src={imageUrl} alt="菜品圖片" className="rounded-lg" />
-                </div>
+            return React.createElement('div', {
+                className: `fixed top-5 right-5 max-w-sm p-4 rounded-lg shadow-lg z-50 animate-slide-in ${typeClasses[type]}`
+            },
+                React.createElement('div', { className: 'flex justify-between items-center' },
+                    React.createElement('p', { className: 'text-sm font-medium whitespace-pre-wrap' }, message),
+                    React.createElement('button', {
+                        onClick: onClose,
+                        className: 'ml-4 text-xl font-bold leading-none'
+                    }, '×')
+                )
             );
         };
 
         // 菜品項目組件
         const MenuItem = ({ item, cartQuantity, onUpdateCart }) => {
-            const [showImage, setShowImage] = useState(false);
-
-            return (
-                <>
-                    <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-3">
-                        <div className="flex items-center gap-3">
-                            <div 
-                                className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden cursor-pointer clickable-btn"
-                                onClick={() => setShowImage(true)}
-                            >
-                                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                            </div>
-                            
-                            <div className="flex-1">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div>
-                                        <h3 className="font-bold text-gray-800 text-sm">{item.icon} {item.name}</h3>
-                                        <p className="text-green-600 font-bold text-sm">${item.price}</p>
-                                    </div>
-                                    <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">
-                                        {item.status}
-                                    </span>
-                                </div>
-                                
-                                <div className="flex items-center gap-3">
-                                    <button
-                                        onClick={() => onUpdateCart(item.name, -1)}
-                                        disabled={cartQuantity === 0}
-                                        className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold clickable-btn ${
-                                            cartQuantity === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'
-                                        }`}
-                                    >-</button>
-                                    
-                                    <span className="min-w-8 text-center font-bold text-lg">{cartQuantity}</span>
-                                    
-                                    <button
-                                        onClick={() => onUpdateCart(item.name, 1)}
-                                        className="w-8 h-8 rounded-full bg-green-500 text-white font-bold hover:bg-green-600 clickable-btn"
-                                    >+</button>
-                                    
-                                    <button
-                                        onClick={() => setShowImage(true)}
-                                        className="ml-2 text-xs text-blue-600 hover:text-blue-800 clickable-btn"
-                                    >看圖片</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {showImage && (
-                        <FullscreenImageModal
-                            imageUrl={item.image}
-                            isOpen={showImage}
-                            onClose={() => setShowImage(false)}
-                        />
-                    )}
-                </>
+            return React.createElement('div', { 
+                className: 'bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-3' 
+            },
+                React.createElement('div', { className: 'flex justify-between items-start mb-3' },
+                    React.createElement('div', null,
+                        React.createElement('h3', { className: 'font-bold text-gray-800 text-sm' }, 
+                            `${item.icon} ${item.name}`
+                        ),
+                        React.createElement('p', { className: 'text-green-600 font-bold text-sm' }, 
+                            `$${item.price}`
+                        )
+                    ),
+                    React.createElement('span', { 
+                        className: 'text-xs px-2 py-1 rounded-full bg-green-100 text-green-800'
+                    }, item.status)
+                ),
+                
+                React.createElement('div', { className: 'flex items-center gap-3' },
+                    React.createElement('button', {
+                        onClick: () => onUpdateCart(item.name, -1),
+                        disabled: cartQuantity === 0,
+                        className: `w-8 h-8 rounded-full flex items-center justify-center text-white font-bold clickable-btn ${
+                            cartQuantity === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'
+                        }`
+                    }, '-'),
+                    
+                    React.createElement('span', { 
+                        className: 'min-w-8 text-center font-bold text-lg'
+                    }, cartQuantity),
+                    
+                    React.createElement('button', {
+                        onClick: () => onUpdateCart(item.name, 1),
+                        className: 'w-8 h-8 rounded-full bg-green-500 text-white font-bold hover:bg-green-600 clickable-btn'
+                    }, '+')
+                )
             );
         };
 
@@ -361,49 +344,26 @@ const DELIVERY_FEE = 30;
             const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
             const [customerName, setCustomerName] = useState('');
             const [customerPhone, setCustomerPhone] = useState('');
-            const [nameError, setNameError] = useState('');
-            const [phoneError, setPhoneError] = useState('');
             const [orders, setOrders] = useState([]);
             const [isLoading, setIsLoading] = useState(false);
 
-            const isLineUser = !!idToken;
-
             useEffect(() => {
-                if (profile?.displayName && isLineUser) {
+                if (profile?.displayName) {
                     setCustomerName(profile.displayName);
                 }
-            }, [profile, isLineUser]);
+            }, [profile]);
 
             const handleSearch = async () => {
-                setNameError('');
-                setPhoneError('');
-                
-                if (!isLineUser) {
-                    if (!customerName.trim()) {
-                        setNameError('請輸入顧客姓名');
-                        return;
-                    }
-                    if (!customerPhone.trim()) {
-                        setPhoneError('請輸入手機號碼');
-                        return;
-                    }
-                    if (!/^09\d{8}$/.test(customerPhone)) {
-                        setPhoneError('請輸入有效的10位手機號碼 (09開頭)');
-                        return;
-                    }
-                } else {
-                    if (!customerName.trim()) {
-                        setNameError('請輸入顧客姓名');
-                        return;
-                    }
+                if (!customerName.trim()) {
+                    showNotification('請輸入顧客姓名', 'error');
+                    return;
                 }
                 
                 setIsLoading(true);
                 try {
                     const params = {
                         customerName: customerName.trim(),
-                        customerPhone: isLineUser ? '' : customerPhone.trim(), // 保持原樣傳遞
-                        idToken: idToken,
+                        customerPhone: customerPhone.trim(),
                         startDate: startDate,
                         endDate: endDate
                     };
@@ -419,105 +379,127 @@ const DELIVERY_FEE = 30;
                 }
             };
 
-            const getStatusBadge = (status) => {
-                const statusConfig = {
-                    'pending': { color: 'bg-yellow-100 text-yellow-800', text: '待確認' },
-                    'confirmed': { color: 'bg-blue-100 text-blue-800', text: '已確認' },
-                    'completed': { color: 'bg-green-100 text-green-800', text: '已完成' },
-                    'cancelled': { color: 'bg-red-100 text-red-800', text: '已取消' }
-                };
-                const config = statusConfig[status] || { color: 'bg-gray-100 text-gray-800', text: status };
-                return <span className={`px-2 py-1 rounded text-xs ${config.color}`}>{config.text}</span>;
-            };
-
-            return (
-                <div className="animate-fade-in">
-                    <div className="flex justify-between items-center mb-4">
-                        <h2 className="text-xl font-bold text-gray-800">訂單紀錄查詢</h2>
-                        <button onClick={onBack} className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded-lg clickable-btn">返回訂餐</button>
-                    </div>
+            return React.createElement('div', { className: 'animate-fade-in' },
+                React.createElement('div', { className: 'flex justify-between items-center mb-4' },
+                    React.createElement('h2', { className: 'text-xl font-bold text-gray-800' }, '訂單紀錄查詢'),
+                    React.createElement('button', {
+                        onClick: onBack,
+                        className: 'text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded-lg clickable-btn'
+                    }, '返回訂餐')
+                ),
+                
+                React.createElement('div', { className: 'grid grid-cols-1 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border' },
+                    React.createElement('div', null,
+                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, '顧客姓名 *'),
+                        React.createElement('input', {
+                            type: 'text',
+                            value: customerName,
+                            onChange: e => setCustomerName(e.target.value),
+                            placeholder: '請輸入完整姓名',
+                            className: 'w-full p-2 border border-gray-300 rounded-md'
+                        })
+                    ),
                     
-                    <div className="grid grid-cols-1 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">顧客姓名 <span className="text-red-500">*</span></label>
-                            <input 
-                                type="text" 
-                                value={customerName} 
-                                onChange={e => setCustomerName(e.target.value)} 
-                                placeholder={isLineUser ? "自動帶入 LINE 名稱" : "請輸入完整姓名"}
-                                className={`w-full p-2 border rounded-md ${nameError ? 'border-red-500' : 'border-gray-300'}`} 
-                            />
-                            {nameError && <p className="text-red-500 text-xs mt-1">{nameError}</p>}
-                            <p className="text-xs text-gray-500 mt-1">📝 姓名必須與訂單完全一致</p>
-                        </div>
-                        
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                手機號碼 {!isLineUser && <span className="text-red-500">*</span>}
-                            </label>
-                            <input 
-                                type="tel" 
-                                value={customerPhone} 
-                                onChange={e => setCustomerPhone(e.target.value)} 
-                                placeholder={isLineUser ? "LINE 用戶可選填" : "0936220000"}
-                                disabled={isLineUser}
-                                className={`w-full p-2 border rounded-md ${phoneError ? 'border-red-500' : 'border-gray-300'} ${isLineUser ? 'bg-gray-200 cursor-not-allowed' : ''}`} 
-                            />
-                            {phoneError && <p className="text-red-500 text-xs mt-1">{phoneError}</p>}
-                            <p className="text-xs text-gray-500 mt-1">📱 電話號碼必須與訂單完全一致 (包含開頭0)</p>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
-                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">結束日期</label>
-                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <button onClick={handleSearch} disabled={isLoading} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-400 flex items-center justify-center clickable-btn">
-                                {isLoading ? <><LoadingSpinner /><span>查詢中...</span></> : '🔍 精確搜尋'}
-                            </button>
-                        </div>
-                    </div>
+                    React.createElement('div', null,
+                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, '手機號碼'),
+                        React.createElement('input', {
+                            type: 'tel',
+                            value: customerPhone,
+                            onChange: e => setCustomerPhone(e.target.value),
+                            placeholder: '0936123456',
+                            className: 'w-full p-2 border border-gray-300 rounded-md'
+                        })
+                    ),
+                    
+                    React.createElement('div', { className: 'grid grid-cols-2 gap-4' },
+                        React.createElement('div', null,
+                            React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, '開始日期'),
+                            React.createElement('input', {
+                                type: 'date',
+                                value: startDate,
+                                onChange: e => setStartDate(e.target.value),
+                                className: 'w-full p-2 border border-gray-300 rounded-md'
+                            })
+                        ),
+                        React.createElement('div', null,
+                            React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, '結束日期'),
+                            React.createElement('input', {
+                                type: 'date',
+                                value: endDate,
+                                onChange: e => setEndDate(e.target.value),
+                                className: 'w-full p-2 border border-gray-300 rounded-md'
+                            })
+                        )
+                    ),
+                    
+                    React.createElement('div', null,
+                        React.createElement('button', {
+                            onClick: handleSearch,
+                            disabled: isLoading,
+                            className: 'w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-400 flex items-center justify-center clickable-btn'
+                        },
+                            isLoading ? [
+                                React.createElement(LoadingSpinner, { key: 'spinner' }),
+                                React.createElement('span', { key: 'text' }, '查詢中...')
+                            ] : '🔍 搜尋訂單'
+                        )
+                    )
+                ),
 
-                    <div className="space-y-4 max-h-[60vh] overflow-y-auto p-1">
-                        {!isLoading && orders.length === 0 && (
-                            <div className="text-center text-gray-500 py-10 italic">
-                                <p>請輸入搜尋條件進行查詢</p>
-                                <p className="text-sm mt-2">使用精確匹配方式搜尋</p>
-                            </div>
-                        )}
-                        {orders.map(order => (
-                            <div key={order.orderId} className="bg-white p-4 rounded-lg shadow border border-gray-200">
-                                <div className="flex justify-between items-start border-b pb-2 mb-2">
-                                    <div>
-                                        <p className="text-xs text-gray-500">訂單編號</p>
-                                        <p className="font-bold text-gray-800 text-sm">{order.orderId}</p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-xs text-gray-500">訂單金額</p>
-                                        <p className="font-bold text-green-600 text-lg">${order.totalAmount}</p>
-                                    </div>
-                                </div>
-                                <div className="text-sm space-y-1 text-gray-600">
-                                    <p><strong>顧客姓名:</strong> {order.customerName}</p>
-                                    <p><strong>手機號碼:</strong> {order.customerPhone}</p>
-                                    <p><strong>下單時間:</strong> {new Date(order.createdAt).toLocaleString('zh-TW')}</p>
-                                    <p><strong>預計取餐:</strong> {new Date(order.pickupTime).toLocaleString('zh-TW')}</p>
-                                    <p><strong>訂單內容:</strong> {order.items}</p>
-                                    <p><strong>狀態:</strong> {getStatusBadge(order.status)}</p>
-                                    {order.deliveryAddress && <p><strong>外送地址:</strong> {order.deliveryAddress}</p>}
-                                    {order.notes && <p><strong>備註:</strong> {order.notes}</p>}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
+                React.createElement('div', { className: 'space-y-4 max-h-[60vh] overflow-y-auto p-1' },
+                    !isLoading && orders.length === 0 && React.createElement('div', {
+                        className: 'text-center text-gray-500 py-10 italic'
+                    },
+                        React.createElement('p', null, '請輸入搜尋條件進行查詢')
+                    ),
+                    orders.map(order => 
+                        React.createElement('div', {
+                            key: order.orderId,
+                            className: 'bg-white p-4 rounded-lg shadow border border-gray-200'
+                        },
+                            React.createElement('div', { className: 'flex justify-between items-start border-b pb-2 mb-2' },
+                                React.createElement('div', null,
+                                    React.createElement('p', { className: 'text-xs text-gray-500' }, '訂單編號'),
+                                    React.createElement('p', { className: 'font-bold text-gray-800 text-sm' }, order.orderId)
+                                ),
+                                React.createElement('div', { className: 'text-right' },
+                                    React.createElement('p', { className: 'text-xs text-gray-500' }, '訂單金額'),
+                                    React.createElement('p', { className: 'font-bold text-green-600 text-lg' }, `$${order.totalAmount}`)
+                                )
+                            ),
+                            React.createElement('div', { className: 'text-sm space-y-1 text-gray-600' },
+                                React.createElement('p', null, 
+                                    React.createElement('strong', null, '顧客姓名:'),
+                                    ` ${order.customerName}`
+                                ),
+                                React.createElement('p', null,
+                                    React.createElement('strong', null, '手機號碼:'),
+                                    ` ${order.customerPhone}`
+                                ),
+                                React.createElement('p', null,
+                                    React.createElement('strong', null, '下單時間:'),
+                                    ` ${new Date(order.createdAt).toLocaleString('zh-TW')}`
+                                ),
+                                React.createElement('p', null,
+                                    React.createElement('strong', null, '預計取餐:'),
+                                    ` ${new Date(order.pickupTime).toLocaleString('zh-TW')}`
+                                ),
+                                React.createElement('p', null,
+                                    React.createElement('strong', null, '訂單內容:'),
+                                    ` ${order.items}`
+                                ),
+                                order.deliveryAddress && React.createElement('p', null,
+                                    React.createElement('strong', null, '外送地址:'),
+                                    ` ${order.deliveryAddress}`
+                                ),
+                                order.notes && React.createElement('p', null,
+                                    React.createElement('strong', null, '備註:'),
+                                    ` ${order.notes}`
+                                )
+                            )
+                        )
+                    )
+                )
             );
         };
 
@@ -533,31 +515,69 @@ const DELIVERY_FEE = 30;
                     .catch(() => showNotification('複製失敗', 'error'));
             };
 
-            return (
-                <div className="text-center p-5 animate-fade-in">
-                    <div className="text-6xl mb-5">✅</div>
-                    <h3 className="text-2xl font-bold text-green-600 mb-4">訂單提交成功！</h3>
-                    <div className="bg-gray-50 p-4 rounded-lg my-5 text-left border">
-                        <p><strong>訂單編號：</strong><span className="font-mono">{orderData.orderId}</span></p>
-                        <p><strong>顧客姓名：</strong><span>{orderData.customerName}</span></p>
-                        <p><strong>聯絡電話：</strong><span>{orderData.customerPhone}</span></p>
-                        <p><strong>最終總金額：</strong>$<span className="text-green-600 font-bold">{orderData.totalAmount}</span></p>
-                        <p><strong>取餐時間：</strong><span>{formatDisplayTime(orderData.pickupTime)}</span></p>
-                        <p><strong>取餐方式：</strong><span>{orderData.deliveryAddress ? '外送' : '自取'}</span></p>
-                        {orderData.deliveryAddress && <p><strong>外送地址：</strong><span>{orderData.deliveryAddress}</span></p>}
-                        {orderData.notes && <p><strong>備註：</strong><span>{orderData.notes}</span></p>}
-                    </div>
-                    <div className="my-8">
-                        <p className="text-lg font-bold mb-4">📱 分享訂單資訊</p>
-                        <a href={`https://line.me/R/msg/text/?${encodeURIComponent(shareTextContent)}`} target="_blank" rel="noopener noreferrer" className="inline-block my-4 p-2.5 bg-[#06c755] rounded-lg clickable-btn">
-                            <img src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png" alt="分享到 LINE" className="h-10" />
-                        </a>
-                        <div className="mt-6">
-                            <button onClick={copyShareText} className="bg-blue-500 text-white border-none py-2 px-5 rounded-md cursor-pointer hover:bg-blue-600 clickable-btn">📋 複製訂單資訊</button>
-                        </div>
-                    </div>
-                    <button onClick={onNewOrder} className="bg-green-600 text-white border-none py-3 px-8 rounded-md cursor-pointer text-base mt-5 hover:bg-green-700 clickable-btn">📝 再訂一單</button>
-                </div>
+            return React.createElement('div', { className: 'text-center p-5 animate-fade-in' },
+                React.createElement('div', { className: 'text-6xl mb-5' }, '✅'),
+                React.createElement('h3', { className: 'text-2xl font-bold text-green-600 mb-4' }, '訂單提交成功！'),
+                React.createElement('div', { className: 'bg-gray-50 p-4 rounded-lg my-5 text-left border' },
+                    React.createElement('p', null, 
+                        React.createElement('strong', null, '訂單編號：'),
+                        React.createElement('span', { className: 'font-mono' }, orderData.orderId)
+                    ),
+                    React.createElement('p', null, 
+                        React.createElement('strong', null, '顧客姓名：'),
+                        React.createElement('span', null, orderData.customerName)
+                    ),
+                    React.createElement('p', null, 
+                        React.createElement('strong', null, '聯絡電話：'),
+                        React.createElement('span', null, orderData.customerPhone)
+                    ),
+                    React.createElement('p', null, 
+                        React.createElement('strong', null, '最終總金額：'),
+                        '$',
+                        React.createElement('span', { className: 'text-green-600 font-bold' }, orderData.totalAmount)
+                    ),
+                    React.createElement('p', null, 
+                        React.createElement('strong', null, '取餐時間：'),
+                        React.createElement('span', null, formatDisplayTime(orderData.pickupTime))
+                    ),
+                    React.createElement('p', null, 
+                        React.createElement('strong', null, '取餐方式：'),
+                        React.createElement('span', null, orderData.deliveryAddress ? '外送' : '自取')
+                    ),
+                    orderData.deliveryAddress && React.createElement('p', null, 
+                        React.createElement('strong', null, '外送地址：'),
+                        React.createElement('span', null, orderData.deliveryAddress)
+                    ),
+                    orderData.notes && React.createElement('p', null, 
+                        React.createElement('strong', null, '備註：'),
+                        React.createElement('span', null, orderData.notes)
+                    )
+                ),
+                React.createElement('div', { className: 'my-8' },
+                    React.createElement('p', { className: 'text-lg font-bold mb-4' }, '📱 分享訂單資訊'),
+                    React.createElement('a', {
+                        href: `https://line.me/R/msg/text/?${encodeURIComponent(shareTextContent)}`,
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        className: 'inline-block my-4 p-2.5 bg-[#06c755] rounded-lg clickable-btn'
+                    },
+                        React.createElement('img', {
+                            src: 'https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png',
+                            alt: '分享到 LINE',
+                            className: 'h-10'
+                        })
+                    ),
+                    React.createElement('div', { className: 'mt-6' },
+                        React.createElement('button', {
+                            onClick: copyShareText,
+                            className: 'bg-blue-500 text-white border-none py-2 px-5 rounded-md cursor-pointer hover:bg-blue-600 clickable-btn'
+                        }, '📋 複製訂單資訊')
+                    )
+                ),
+                React.createElement('button', {
+                    onClick: onNewOrder,
+                    className: 'bg-green-600 text-white border-none py-3 px-8 rounded-md cursor-pointer text-base mt-5 hover:bg-green-700 clickable-btn'
+                }, '📝 再訂一單')
             );
         };
 
@@ -572,8 +592,6 @@ const DELIVERY_FEE = 30;
             const [pickupTime, setPickupTime] = useState('');
             const [deliveryAddress, setDeliveryAddress] = useState('');
             const [notes, setNotes] = useState('');
-            const [phoneError, setPhoneError] = useState('');
-            const [timeError, setTimeError] = useState('');
 
             useEffect(() => {
                 const now = new Date();
@@ -667,36 +685,23 @@ const DELIVERY_FEE = 30;
             };
 
             const validateForm = () => {
-                let isValid = true;
-                setPhoneError('');
-                setTimeError('');
-
-                // 嚴格驗證電話格式，必須是 09 開頭的 10 位數字
+                if (!customerName.trim()) {
+                    showNotification('請填寫姓名', 'error');
+                    return false;
+                }
                 if (!/^09\d{8}$/.test(customerPhone)) {
-                    setPhoneError('請輸入有效的10位手機號碼 (09開頭)');
-                    isValid = false;
+                    showNotification('請輸入有效的10位手機號碼 (09開頭)', 'error');
+                    return false;
                 }
-
                 if (!pickupDate || !pickupTime) {
-                    setTimeError('請選擇取餐日期和時間');
-                    isValid = false;
-                } else {
-                    const selectedDateTime = new Date(getFullPickupTime());
-                    const minDateTime = new Date();
-                    minDateTime.setMinutes(minDateTime.getMinutes() + 29);
-                    
-                    if (selectedDateTime < minDateTime) {
-                        setTimeError('取餐時間必須在30分鐘之後');
-                        isValid = false;
-                    }
+                    showNotification('請選擇取餐日期和時間', 'error');
+                    return false;
                 }
-                
                 if (cart.length === 0) {
                     showNotification('請至少選擇一個餐點', 'error');
-                    isValid = false;
+                    return false;
                 }
-                
-                return isValid;
+                return true;
             };
 
             const handleSubmit = async () => {
@@ -704,14 +709,17 @@ const DELIVERY_FEE = 30;
                 
                 setIsLoading(true);
                 try {
-                    await onSubmitOrder({ 
+                    const orderData = { 
                         customerName, 
-                        customerPhone, // 保持原樣 0936220000
+                        customerPhone,
                         items: cart, 
                         pickupTime: getFullPickupTime(), 
                         deliveryAddress, 
-                        notes 
-                    }, idToken);
+                        notes,
+                        totalAmount
+                    };
+                    
+                    await onSubmitOrder(orderData);
                 } catch (error) {
                     // 錯誤在父組件處理
                 } finally {
@@ -729,159 +737,175 @@ const DELIVERY_FEE = 30;
             const dateOptions = getDateOptions();
             const timeOptions = getTimeOptions();
 
-            return (
-                <div className="animate-fade-in">
-                    <div className={`p-3 rounded-lg text-sm text-center border ${statusClasses[statusType]}`}>{liffStatus}</div>
+            return React.createElement('div', { className: 'animate-fade-in' },
+                React.createElement('div', {
+                    className: `p-3 rounded-lg text-sm text-center border ${statusClasses[statusType]}`
+                }, liffStatus),
+                
+                React.createElement('button', {
+                    onClick: onViewHistory,
+                    className: 'w-full text-center p-2.5 border border-blue-500 text-blue-600 rounded-md text-sm hover:bg-blue-500 hover:text-white transition-colors duration-200 mt-4 clickable-btn'
+                }, '🕒 查詢歷史訂單'),
+                
+                React.createElement('div', { className: 'space-y-4 mt-4' },
+                    React.createElement('div', null,
+                        React.createElement('label', {
+                            className: 'block mb-2 font-bold text-gray-700 text-sm'
+                        }, '姓名 ', React.createElement('span', { className: 'text-red-500' }, '*')),
+                        React.createElement('input', {
+                            type: 'text',
+                            value: customerName,
+                            onChange: (e) => setCustomerName(e.target.value),
+                            placeholder: '自動帶入 LINE 名稱',
+                            className: 'w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500'
+                        })
+                    ),
                     
-                    <button onClick={onViewHistory} className="w-full text-center p-2.5 border border-blue-500 text-blue-600 rounded-md text-sm hover:bg-blue-500 hover:text-white transition-colors duration-200 mt-4 clickable-btn">
-                        🕒 查詢歷史訂單
-                    </button>
+                    React.createElement('div', null,
+                        React.createElement('label', {
+                            className: 'block mb-2 font-bold text-gray-700 text-sm'
+                        }, '手機號碼 ', React.createElement('span', { className: 'text-red-500' }, '*')),
+                        React.createElement('input', {
+                            type: 'tel',
+                            value: customerPhone,
+                            onChange: (e) => setCustomerPhone(e.target.value),
+                            placeholder: '0936220000',
+                            className: 'w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500'
+                        }),
+                        React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, '請輸入09開頭的10位手機號碼')
+                    ),
                     
-                    <div className="space-y-4 mt-4">
-                        <div>
-                            <label className="block mb-2 font-bold text-gray-700 text-sm">姓名 <span className="text-red-500">*</span></label>
-                            <input 
-                                type="text" 
-                                value={customerName} 
-                                onChange={(e) => setCustomerName(e.target.value)} 
-                                placeholder="自動帶入 LINE 名稱" 
-                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
-                            />
-                        </div>
-                        
-                        <div>
-                            <label className="block mb-2 font-bold text-gray-700 text-sm">手機號碼 <span className="text-red-500">*</span></label>
-                            <input 
-                                type="tel" 
-                                value={customerPhone} 
-                                onChange={(e) => setCustomerPhone(e.target.value)} 
-                                placeholder="0936220000"
-                                className={`w-full p-3 border rounded-lg text-sm focus:ring-green-500 focus:border-green-500 ${phoneError ? 'border-red-500' : 'border-gray-300'}`}
-                            />
-                            {phoneError && <p className="text-red-500 text-xs mt-1">{phoneError}</p>}
-                            <p className="text-xs text-gray-500 mt-1">請輸入09開頭的10位手機號碼</p>
-                        </div>
-                        
-                        <div>
-                            <label className="block mb-2 font-bold text-gray-700 text-sm">取餐日期 <span className="text-red-500">*</span></label>
-                            <select 
-                                value={pickupDate} 
-                                onChange={(e) => setPickupDate(e.target.value)}
-                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
-                            >
-                                <option value="">請選擇取餐日期</option>
-                                {dateOptions.map(date => (
-                                    <option key={date.value} value={date.value}>{date.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                        
-                        <div>
-                            <label className="block mb-2 font-bold text-gray-700 text-sm">取餐時間 <span className="text-red-500">*</span></label>
-                            <select 
-                                value={pickupTime} 
-                                onChange={(e) => setPickupTime(e.target.value)}
-                                className={`w-full p-3 border rounded-lg text-sm focus:ring-green-500 focus:border-green-500 ${timeError ? 'border-red-500' : 'border-gray-300'}`}
-                            >
-                                <option value="">請選擇取餐時間</option>
-                                {timeOptions.map(time => (
-                                    <option key={time} value={time}>{time}</option>
-                                ))}
-                            </select>
-                            {timeError && <p className="text-red-500 text-xs mt-1">{timeError}</p>}
-                            <p className="text-xs text-gray-500 mt-1">營業時間: 10:00 - 21:00</p>
-                        </div>
-                        
-                        <div>
-                            <label className="block mb-2 font-bold text-gray-700 text-sm">外送地點 (選填)</label>
-                            <input 
-                                type="text" 
-                                value={deliveryAddress} 
-                                onChange={(e) => setDeliveryAddress(e.target.value)} 
-                                placeholder="如需外送請填寫地址" 
-                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
-                            />
-                            <p className="text-xs text-gray-500 mt-1">※ 填寫地址將計算 ${DELIVERY_FEE} 外送費</p>
-                        </div>
-                        
-                        <div>
-                            <label className="block mb-2 font-bold text-gray-700 text-sm">備註 (選填)</label>
-                            <textarea 
-                                value={notes} 
-                                onChange={(e) => setNotes(e.target.value)} 
-                                rows={2} 
-                                placeholder="例如：不要香菜、加辣等" 
-                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
-                            />
-                        </div>
-                    </div>
+                    React.createElement('div', null,
+                        React.createElement('label', {
+                            className: 'block mb-2 font-bold text-gray-700 text-sm'
+                        }, '取餐日期 ', React.createElement('span', { className: 'text-red-500' }, '*')),
+                        React.createElement('select', {
+                            value: pickupDate,
+                            onChange: (e) => setPickupDate(e.target.value),
+                            className: 'w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500'
+                        },
+                            React.createElement('option', { value: '' }, '請選擇取餐日期'),
+                            dateOptions.map(date => 
+                                React.createElement('option', { key: date.value, value: date.value }, date.label)
+                            )
+                        )
+                    ),
                     
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-4">
-                        <h2 className="text-center text-lg font-bold text-gray-800 mb-4">📝 選擇餐點</h2>
-                        <div className="space-y-3">
-                            {menuItems.map(item => (
-                                <MenuItem
-                                    key={item.name}
-                                    item={item}
-                                    cartQuantity={getItemQuantity(item.name)}
-                                    onUpdateCart={updateCart}
-                                />
-                            ))}
-                        </div>
-                    </div>
+                    React.createElement('div', null,
+                        React.createElement('label', {
+                            className: 'block mb-2 font-bold text-gray-700 text-sm'
+                        }, '取餐時間 ', React.createElement('span', { className: 'text-red-500' }, '*')),
+                        React.createElement('select', {
+                            value: pickupTime,
+                            onChange: (e) => setPickupTime(e.target.value),
+                            className: 'w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500'
+                        },
+                            React.createElement('option', { value: '' }, '請選擇取餐時間'),
+                            timeOptions.map(time => 
+                                React.createElement('option', { key: time, value: time }, time)
+                            )
+                        ),
+                        React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, '營業時間: 10:00 - 21:00')
+                    ),
+                    
+                    React.createElement('div', null,
+                        React.createElement('label', { className: 'block mb-2 font-bold text-gray-700 text-sm' }, '外送地點 (選填)'),
+                        React.createElement('input', {
+                            type: 'text',
+                            value: deliveryAddress,
+                            onChange: (e) => setDeliveryAddress(e.target.value),
+                            placeholder: '如需外送請填寫地址',
+                            className: 'w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500'
+                        }),
+                        React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, `※ 填寫地址將計算 $${DELIVERY_FEE} 外送費`)
+                    ),
+                    
+                    React.createElement('div', null,
+                        React.createElement('label', { className: 'block mb-2 font-bold text-gray-700 text-sm' }, '備註 (選填)'),
+                        React.createElement('textarea', {
+                            value: notes,
+                            onChange: (e) => setNotes(e.target.value),
+                            rows: 2,
+                            placeholder: '例如：不要香菜、加辣等',
+                            className: 'w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500'
+                        })
+                    )
+                ),
+                
+                React.createElement('div', { className: 'bg-gray-50 p-4 rounded-lg border border-gray-200 mt-4' },
+                    React.createElement('h2', { className: 'text-center text-lg font-bold text-gray-800 mb-4' }, '📝 選擇餐點'),
+                    React.createElement('div', { className: 'space-y-3' },
+                        menuItems.map(item => 
+                            React.createElement(MenuItem, {
+                                key: item.name,
+                                item: item,
+                                cartQuantity: getItemQuantity(item.name),
+                                onUpdateCart: updateCart
+                            })
+                        )
+                    )
+                ),
 
-                    {cart.length > 0 && (
-                        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 mt-4">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-lg font-bold text-gray-800">
-                                    🛒 訂單明細 ({cart.reduce((sum, item) => sum + item.quantity, 0)} 項)
-                                </h2>
-                                <button onClick={clearCart} className="text-xs bg-red-100 text-red-600 hover:bg-red-500 hover:text-white font-semibold py-1 px-3 rounded-full clickable-btn">
-                                    🗑️ 清空
-                                </button>
-                            </div>
-                            
-                            <div className="space-y-2">
-                                {cart.map(item => (
-                                    <div key={item.name} className="flex justify-between items-center py-2 border-b border-gray-200">
-                                        <div>
-                                            <p className="font-bold text-gray-800 text-sm">{item.icon} {item.name}</p>
-                                            <p className="text-xs text-gray-500">${item.price} x {item.quantity}</p>
-                                        </div>
-                                        <p className="font-bold text-green-600">${item.price * item.quantity}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                cart.length > 0 && React.createElement('div', { className: 'bg-yellow-50 p-4 rounded-lg border border-yellow-200 mt-4' },
+                    React.createElement('div', { className: 'flex justify-between items-center mb-4' },
+                        React.createElement('h2', { className: 'text-lg font-bold text-gray-800' },
+                            `🛒 訂單明細 (${cart.reduce((sum, item) => sum + item.quantity, 0)} 項)`
+                        ),
+                        React.createElement('button', {
+                            onClick: clearCart,
+                            className: 'text-xs bg-red-100 text-red-600 hover:bg-red-500 hover:text-white font-semibold py-1 px-3 rounded-full clickable-btn'
+                        }, '🗑️ 清空')
+                    ),
                     
-                    <div className="bg-green-50 p-4 rounded-lg border border-green-200 space-y-2 mt-4">
-                        <div className="flex justify-between text-sm text-gray-600">
-                            <span>餐點總計:</span>
-                            <span>${subtotal}</span>
-                        </div>
-                        {deliveryFee > 0 && (
-                            <div className="flex justify-between text-sm text-gray-600">
-                                <span>外送費:</span>
-                                <span>${deliveryFee}</span>
-                            </div>
-                        )}
-                        <div className="flex justify-between font-bold text-lg text-gray-800 border-t border-gray-300 pt-3 mt-3">
-                            <span>總金額:</span>
-                            <span>${totalAmount}</span>
-                        </div>
-                    </div>
-                    
-                    <div className="mt-6">
-                        <button 
-                            onClick={handleSubmit} 
-                            disabled={cart.length === 0 || isLoading}
-                            className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg text-lg disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center clickable-btn"
-                        >
-                            {isLoading ? <><LoadingSpinner /><span>處理中...</span></> : <span>✅ 送出訂單</span>}
-                        </button>
-                    </div>
-                </div>
+                    React.createElement('div', { className: 'space-y-2' },
+                        cart.map(item => 
+                            React.createElement('div', {
+                                key: item.name,
+                                className: 'flex justify-between items-center py-2 border-b border-gray-200'
+                            },
+                                React.createElement('div', null,
+                                    React.createElement('p', { className: 'font-bold text-gray-800 text-sm' },
+                                        `${item.icon} ${item.name}`
+                                    ),
+                                    React.createElement('p', { className: 'text-xs text-gray-500' },
+                                        `$${item.price} x ${item.quantity}`
+                                    )
+                                ),
+                                React.createElement('p', { className: 'font-bold text-green-600' },
+                                    `$${item.price * item.quantity}`
+                                )
+                            )
+                        )
+                    )
+                ),
+                
+                cart.length > 0 && React.createElement('div', { className: 'bg-green-50 p-4 rounded-lg border border-green-200 space-y-2 mt-4' },
+                    React.createElement('div', { className: 'flex justify-between text-sm text-gray-600' },
+                        React.createElement('span', null, '餐點總計:'),
+                        React.createElement('span', null, `$${subtotal}`)
+                    ),
+                    deliveryFee > 0 && React.createElement('div', { className: 'flex justify-between text-sm text-gray-600' },
+                        React.createElement('span', null, '外送費:'),
+                        React.createElement('span', null, `$${deliveryFee}`)
+                    ),
+                    React.createElement('div', { className: 'flex justify-between font-bold text-lg text-gray-800 border-t border-gray-300 pt-3 mt-3' },
+                        React.createElement('span', null, '總金額:'),
+                        React.createElement('span', null, `$${totalAmount}`)
+                    )
+                ),
+                
+                React.createElement('div', { className: 'mt-6' },
+                    React.createElement('button', {
+                        onClick: handleSubmit,
+                        disabled: cart.length === 0 || isLoading,
+                        className: 'w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg text-lg disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center clickable-btn'
+                    },
+                        isLoading ? [
+                            React.createElement(LoadingSpinner, { key: 'spinner' }),
+                            React.createElement('span', { key: 'text' }, '處理中...')
+                        ] : '✅ 送出訂單'
+                    )
+                )
             );
         };
 
@@ -911,17 +935,16 @@ const DELIVERY_FEE = 30;
                 fetchMenu();
             }, []);
 
-            const handleSubmitOrder = async (orderData, idToken) => {
+            const handleSubmitOrder = async (orderData) => {
                 try {
-                    const result = await apiService.submitOrder(orderData, idToken);
+                    const result = await apiService.submitOrder(orderData);
                     const finalOrderData = { 
                         ...orderData, 
-                        orderId: result.data?.orderId || 'TEST_' + Date.now(), 
-                        totalAmount: result.data?.totalAmount || orderData.items.reduce((sum, item) => sum + item.price * item.quantity, 0) + (orderData.deliveryAddress ? DELIVERY_FEE : 0)
+                        orderId: result.data?.orderId || 'ORD_' + Date.now()
                     };
                     setSubmittedOrder(finalOrderData);
                     setView('success');
-                    showNotification('訂單提交成功！');
+                    showNotification('訂單提交成功！已儲存到 Google Sheets');
                 } catch (error) {
                     showNotification(`訂單提交失敗：${error.message}`, 'error');
                     throw error;
@@ -935,56 +958,68 @@ const DELIVERY_FEE = 30;
 
             const renderContent = () => {
                 if (isMenuLoading) {
-                    return (
-                        <div className="text-center py-20 flex flex-col items-center justify-center text-gray-600">
-                            <LoadingSpinner />
-                            <p className="mt-3 text-sm">正在載入菜單...</p>
-                        </div>
+                    return React.createElement('div', {
+                        className: 'text-center py-20 flex flex-col items-center justify-center text-gray-600'
+                    },
+                        React.createElement(LoadingSpinner),
+                        React.createElement('p', { className: 'mt-3 text-sm' }, '正在載入菜單...')
                     );
                 }
 
                 switch(view) {
                     case 'history':
-                        return <HistoryPage onBack={() => setView('order')} showNotification={showNotification} />;
+                        return React.createElement(HistoryPage, {
+                            onBack: () => setView('order'),
+                            showNotification: showNotification
+                        });
                     case 'success':
-                        return submittedOrder && <SuccessPage orderData={submittedOrder} onNewOrder={handleNewOrder} showNotification={showNotification} />;
+                        return submittedOrder && React.createElement(SuccessPage, {
+                            orderData: submittedOrder,
+                            onNewOrder: handleNewOrder,
+                            showNotification: showNotification
+                        });
                     default:
-                        return <OrderPage menuItems={menuItems} onSubmitOrder={handleSubmitOrder} showNotification={showNotification} onViewHistory={() => setView('history')} />;
+                        return React.createElement(OrderPage, {
+                            menuItems: menuItems,
+                            onSubmitOrder: handleSubmitOrder,
+                            showNotification: showNotification,
+                            onViewHistory: () => setView('history')
+                        });
                 }
             };
 
-            return (
-                <div className="p-4 min-h-screen flex items-center justify-center">
-                    <div className="container max-w-md mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
-                        <div className="bg-[#fff3cd] border border-[#ffeaa7] rounded-t-2xl p-2.5 text-xs text-center text-[#856404]">
-                            <span role="img" aria-label="lock">🔒</span> 安全訂餐系統 - 24小時接受預訂
-                        </div>
+            return React.createElement('div', { className: 'p-4 min-h-screen flex items-center justify-center' },
+                React.createElement('div', { className: 'container max-w-md mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden' },
+                    React.createElement('div', {
+                        className: 'bg-[#fff3cd] border border-[#ffeaa7] rounded-t-2xl p-2.5 text-xs text-center text-[#856404]'
+                    }, '🔒 安全訂餐系統 - 24小時接受預訂'),
 
-                        <header className="bg-green-500 text-white p-5 text-center relative">
-                            <h1 className="text-2xl font-bold mb-1">🍜 台灣小吃店</h1>
-                            <p className="text-sm opacity-90">LINE 快速訂餐 - 24小時服務</p>
-                        </header>
+                    React.createElement('header', { className: 'bg-green-500 text-white p-5 text-center' },
+                        React.createElement('h1', { className: 'text-2xl font-bold mb-1' }, '🍜 台灣小吃店'),
+                        React.createElement('p', { className: 'text-sm opacity-90' }, 'LINE 快速訂餐 - 24小時服務')
+                    ),
 
-                        <main className="p-5 space-y-4">
-                            <Notification 
-                                message={notification.message} 
-                                type={notification.type} 
-                                visible={notification.visible} 
-                                onClose={() => setNotification(prev => ({ ...prev, visible: false }))} 
-                            />
-                            {renderContent()}
-                        </main>
-                        
-                        <footer className="bg-gray-100 p-4 text-center text-xs text-gray-500 border-t border-gray-200">
-                            <p>📍 營業時間: 10:00 - 21:00 | 📞 聯絡電話: 02-1234-5678</p>
-                        </footer>
-                    </div>
-                </div>
+                    React.createElement('main', { className: 'p-5 space-y-4' },
+                        React.createElement(Notification, {
+                            message: notification.message,
+                            type: notification.type,
+                            visible: notification.visible,
+                            onClose: () => setNotification(prev => ({ ...prev, visible: false }))
+                        }),
+                        renderContent()
+                    ),
+                    
+                    React.createElement('footer', {
+                        className: 'bg-gray-100 p-4 text-center text-xs text-gray-500 border-t border-gray-200'
+                    },
+                        React.createElement('p', null, '📍 營業時間: 10:00 - 21:00 | 📞 聯絡電話: 02-1234-5678')
+                    )
+                )
             );
         };
 
         // 渲染應用
-        ReactDOM.render(<App />, document.getElementById('root'));
+        ReactDOM.render(React.createElement(App), document.getElementById('root'));
     </script>
 </body>
 </html>
