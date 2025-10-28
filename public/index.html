@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>台灣小吃店 - LINE 快速訂餐</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            background-color: #f7fafc;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        input, textarea, select {
+            -webkit-user-select: text;
+            user-select: text;
+        }
+        @keyframes slide-in {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .animate-slide-in { animation: slide-in 0.3s ease-out forwards; }
+        @keyframes fade-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fade-in 0.5s ease-out; }
+        .clickable-btn {
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            user-select: none;
+        }
+        .clickable-btn:active {
+            transform: scale(0.95);
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useCallback, useEffect, useMemo } = React;
+
+        // 配置 - 从环境变量读取
+        const API_URL = '<%= API_URL %>';
+        const DELIVERYFee = 30;
+
+        // 默认菜单
+        const defaultMenu = [
+            { name: '滷肉飯', price: 35, icon: '🍚', status: '供應中' },
+            { name: '雞肉飯', price: 40, icon: '🍗', status: '供應中' },
+            { name: '蚵仔煎', price: 65, icon: '🍳', status: '供應中' },
+            { name: '大腸麵線', price: 50, icon: '🍜', status: '供應中' },
+            { name: '珍珠奶茶', price: 45, icon: '🥤', status: '供應中' }
+        ];
+
+        // 请求签名生成
+        function generateRequestSignature(data, secret) {
+            const timestamp = Date.now();
+            const signature = CryptoJS.HmacSHA256(`${timestamp}:${JSON.stringify(data)}`, secret).toString();
+            return { timestamp, signature };
+        }
+
+        // API服务
+        const apiService = {
+            async request(endpoint, payload = {}) {
+                try {
+                    // 获取LIFF ID Token
+                    let idToken = null;
+                    if (window.liff && liff.isLoggedIn()) {
+                        idToken = await liff.getIDToken();
+                    }
+                    
+                    // 准备请求数据
+                    const requestData = { ...payload, idToken };
+                    
+                    // 生成请求签名
+                    const { timestamp, signature } = generateRequestSignature(
+                        requestData,
+                        '<%= API_SECRET %>'
+                    );
+                    
+                    console.log(`发送请求到 ${API_URL}${endpoint}`, requestData);
+                    
+                    const response = await fetch(`${API_URL}${endpoint}`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'X-Request-Timestamp': timestamp,
+                            'X-Request-Signature': signature
+                        },
+                        body: JSON.stringify(requestData)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP 错误! 状态: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    console.log('API 响应:', result);
+                    return result;
+                } catch (error) {
+                    console.error('API 请求失败:', error);
+                    throw new Error('网络连接失败，请检查网络连接');
+                }
+            },
+
+            async getMenu() {
+                try {
+                    const result = await this.request('/menu');
+                    if (result.success && Array.isArray(result.data)) {
+                        return result.data;
+                    }
+                    return defaultMenu;
+                } catch (error) {
+                    console.warn('获取菜单失败，使用默认菜单:', error);
+                    return defaultMenu;
+                }
+            },
+            
+            async submitOrder(orderData) {
+                try {
+                    // 准备发送的数据
+                    const orderDataForServer = {
+                        action: 'createOrder',
+                        customerName: orderData.customerName.trim(),
+                        customerPhone: orderData.customerPhone.trim(),
+                        items: orderData.items.map(item => `${item.name} x${item.quantity}`).join(', '),
+                        itemsDetail: orderData.items.map(item => ({
+                            name: item.name,
+                            quantity: item.quantity,
+                            price: item.price
+                        })),
+                        totalAmount: orderData.totalAmount,
+                        pickupTime: orderData.pickupTime,
+                        deliveryAddress: orderData.deliveryAddress.trim(),
+                        notes: orderData.notes.trim(),
+                        orderId: 'ORD_' + Date.now()
+                    };
+
+                    console.log('提交订单数据:', orderDataForServer);
+
+                    const result = await this.request('/order', orderDataForServer);
+
+                    if (!result.success) {
+                        throw new Error(result.message || '订单提交失败');
+                    }
+
+                    return {
+                        ...result,
+                        data: {
+                            orderId: orderDataForServer.orderId,
+                            totalAmount: orderData.totalAmount
+                        }
+                    };
+                } catch (error) {
+                    console.error('提交订单失败:', error);
+                    throw error;
+                }
+            },
+
+            async getOrders(params) {
+                try {
+                    const searchParams = {
+                        action: 'getOrders',
+                        customerName: params.customerName.trim(),
+                        customerPhone: params.customerPhone ? params.customerPhone.trim() : '',
+                        startDate: params.startDate,
+                        endDate: params.endDate
+                    };
+
+                    const result = await this.request('/order', searchParams);
+
+                    if (!result.success) {
+                        throw new Error(result.message || '查询失败');
+                    }
+
+                    return result.data || [];
+                } catch (error) {
+                    console.error('查询订单失败:', error);
+                    throw error;
+                }
+            }
+        };
+
+        // LINE LIFF Hook
+        const useLiff = () => {
+            const [profile, setProfile] = useState(null);
+            const [isLoggedIn, setIsLoggedIn] = useState(false);
+            const [liffStatus, setLiffStatus] = useState('🔄 初始化 LINE 功能中...');
+            const [statusType, setStatusType] = useState('info');
+
+            useEffect(() => {
+                const initializeLiff = async () => {
+                    try {
+                        console.log('正在初始化 LINE LIFF...');
+                        await liff.init({ liffId: '<%= LIFF_ID %>' });
+                        
+                        if (liff.isLoggedIn()) {
+                            setIsLoggedIn(true);
+                            const userProfile = await liff.getProfile();
+                            setProfile(userProfile);
+                            setLiffStatus(`👋 欢迎，${userProfile.displayName}！`);
+                            setStatusType('success');
+                        } else {
+                            setLiffStatus('请在 LINE App 中开启以获得完整功能。');
+                            setStatusType('warning');
+                        }
+                    } catch (error) {
+                        console.warn('LINE 初始化失败:', error);
+                        setLiffStatus('⚠️ LINE 功能载入失败，但您仍可订餐。');
+                        setStatusType('warning');
+                    }
+                };
+                
+                if (window.liff) {
+                    initializeLiff();
+                } else {
+                    setLiffStatus('⚠️ LINE SDK 载入失败，但您仍可订餐。');
+                    setStatusType('warning');
+                }
+            }, []);
+
+            return { profile, isLoggedIn, liffStatus, statusType };
+        };
+
+        // 加载动画组件
+        const LoadingSpinner = () => (
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        );
+
+        // 通知组件
+        const Notification = ({ message, type, visible, onClose }) => {
+            useEffect(() => {
+                if (visible) {
+                    const timer = setTimeout(onClose, 4000);
+                    return () => clearTimeout(timer);
+                }
+            }, [visible, onClose]);
+
+            if (!visible) return null;
+            
+            const typeClasses = {
+                success: "bg-green-500 text-white",
+                error: "bg-red-500 text-white",
+                warning: "bg-yellow-500 text-white",
+                info: "bg-blue-500 text-white"
+            };
+            
+            return (
+                <div className={`fixed top-5 right-5 max-w-sm p-4 rounded-lg shadow-lg z-50 animate-slide-in ${typeClasses[type]}`}>
+                    <div className="flex justify-between items-center">
+                        <p className="text-sm font-medium whitespace-pre-wrap">{message}</p>
+                        <button onClick={onClose} className="ml-4 text-xl font-bold leading-none">&times;</button>
+                    </div>
+                </div>
+            );
+        };
+
+        // 菜品项目组件
+        const MenuItem = ({ item, cartQuantity, onUpdateCart }) => {
+            return (
+                <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-3">
+                    <div className="flex justify-between items-start mb-3">
+                        <div>
+                            <h3 className="font-bold text-gray-800 text-sm">{item.icon} {item.name}</h3>
+                            <p className="text-green-600 font-bold text-sm">${item.price}</p>
+                        </div>
+                        <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">
+                            {item.status}
+                        </span>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => onUpdateCart(item.name, -1)}
+                            disabled={cartQuantity === 0}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold clickable-btn ${
+                                cartQuantity === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'
+                            }`}
+                        >-</button>
+                        
+                        <span className="min-w-8 text-center font-bold text-lg">{cartQuantity}</span>
+                        
+                        <button
+                            onClick={() => onUpdateCart(item.name, 1)}
+                            className="w-8 h-8 rounded-full bg-green-500 text-white font-bold hover:bg-green-600 clickable-btn"
+                        >+</button>
+                    </div>
+                </div>
+            );
+        };
+
+        // 历史订单页面
+        const HistoryPage = ({ onBack, showNotification }) => {
+            const { profile } = useLiff();
+            const [startDate, setStartDate] = useState(() => {
+                const d = new Date();
+                d.setDate(d.getDate() - 7);
+                return d.toISOString().split('T')[0];
+            });
+            const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+            const [customerName, setCustomerName] = useState('');
+            const [customerPhone, setCustomerPhone] = useState('');
+            const [orders, setOrders] = useState([]);
+            const [isLoading, setIsLoading] = useState(false);
+
+            useEffect(() => {
+                if (profile?.displayName) {
+                    setCustomerName(profile.displayName);
+                }
+            }, [profile]);
+
+            const handleSearch = async () => {
+                if (!customerName.trim()) {
+                    showNotification('请输入顾客姓名', 'error');
+                    return;
+                }
+                
+                setIsLoading(true);
+                try {
+                    const params = {
+                        customerName: customerName.trim(),
+                        customerPhone: customerPhone.trim(),
+                        startDate: startDate,
+                        endDate: endDate
+                    };
+
+                    const result = await apiService.getOrders(params);
+                    setOrders(result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+                    showNotification(`找到 ${result.length} 笔订单`, 'success');
+                } catch (error) {
+                    showNotification(`查询失败：${error.message}`, 'error');
+                    setOrders([]);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            return (
+                <div className="animate-fade-in">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold text-gray-800">订单记录查询</h2>
+                        <button onClick={onBack} className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded-lg clickable-btn">返回订餐</button>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">顾客姓名 *</label>
+                            <input 
+                                type="text" 
+                                value={customerName} 
+                                onChange={e => setCustomerName(e.target.value)} 
+                                placeholder="请输入完整姓名"
+                                className="w-full p-2 border border-gray-300 rounded-md" 
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">手机号码</label>
+                            <input 
+                                type="tel" 
+                                value={customerPhone} 
+                                onChange={e => setCustomerPhone(e.target.value)} 
+                                placeholder="0936123456"
+                                className="w-full p-2 border border-gray-300 rounded-md" 
+                            />
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">开始日期</label>
+                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">结束日期</label>
+                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full p-2 border border-gray-300 rounded-md" />
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <button onClick={handleSearch} disabled={isLoading} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-400 flex items-center justify-center clickable-btn">
+                                {isLoading ? <><LoadingSpinner /><span>查询中...</span></> : '🔍 搜索订单'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4 max-h-[60vh] overflow-y-auto p-1">
+                        {!isLoading && orders.length === 0 && (
+                            <div className="text-center text-gray-500 py-10 italic">
+                                <p>请输入搜索条件进行查询</p>
+                            </div>
+                        )}
+                        {orders.map(order => (
+                            <div key={order.orderId} className="bg-white p-4 rounded-lg shadow border border-gray-200">
+                                <div className="flex justify-between items-start border-b pb-2 mb-2">
+                                    <div>
+                                        <p className="text-xs text-gray-500">订单编号</p>
+                                        <p className="font-bold text-gray-800 text-sm">{order.orderId}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-xs text-gray-500">订单金额</p>
+                                        <p className="font-bold text-green-600 text-lg">${order.totalAmount}</p>
+                                    </div>
+                                </div>
+                                <div className="text-sm space-y-1 text-gray-600">
+                                    <p><strong>顾客姓名:</strong> {order.customerName}</p>
+                                    <p><strong>手机号码:</strong> {order.customerPhone}</p>
+                                    <p><strong>下单时间:</strong> {new Date(order.createdAt).toLocaleString('zh-TW')}</p>
+                                    <p><strong>预计取餐:</strong> {new Date(order.pickupTime).toLocaleString('zh-TW')}</p>
+                                    <p><strong>订单内容:</strong> {order.items}</p>
+                                    {order.deliveryAddress && <p><strong>外送地址:</strong> {order.deliveryAddress}</p>}
+                                    {order.notes && <p><strong>备注:</strong> {order.notes}</p>}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // 成功页面
+        const SuccessPage = ({ orderData, onNewOrder, showNotification }) => {
+            const formatDisplayTime = (timestamp) => new Date(timestamp).toLocaleString('zh-TW');
+            
+            const shareTextContent = `🍽️ 台湾小吃店 - 订单确认\n\n📋 订单编号：${orderData.orderId}\n👤 顾客姓名：${orderData.customerName}\n📞 联络电话：${orderData.customerPhone}\n\n💰 最终总金额：$${orderData.totalAmount}\n⏰ 取餐时间：${formatDisplayTime(orderData.pickupTime)}\n📍 ${orderData.deliveryAddress ? `外送地址：${orderData.deliveryAddress}` : '自取'}\n📝 备注：${orderData.notes || '无'}\n\n📍 取餐地址：台湾小吃店\n🕒 营业时间：10:00-21:00\n📞 联络电话：02-1234-5678`;
+
+            const copyShareText = () => {
+                navigator.clipboard.writeText(shareTextContent)
+                    .then(() => showNotification('订单资讯已复制！', 'success'))
+                    .catch(() => showNotification('复制失败', 'error'));
+            };
+
+            return (
+                <div className="text-center p-5 animate-fade-in">
+                    <div className="text-6xl mb-5">✅</div>
+                    <h3 className="text-2xl font-bold text-green-600 mb-4">订单提交成功！</h3>
+                    <div className="bg-gray-50 p-4 rounded-lg my-5 text-left border">
+                        <p><strong>订单编号：</strong><span className="font-mono">{orderData.orderId}</span></p>
+                        <p><strong>顾客姓名：</strong><span>{orderData.customerName}</span></p>
+                        <p><strong>联络电话：</strong><span>{orderData.customerPhone}</span></p>
+                        <p><strong>最终总金额：</strong>$<span className="text-green-600 font-bold">{orderData.totalAmount}</span></p>
+                        <p><strong>取餐时间：</strong><span>{formatDisplayTime(orderData.pickupTime)}</span></p>
+                        <p><strong>取餐方式：</strong><span>{orderData.deliveryAddress ? '外送' : '自取'}</span></p>
+                        {orderData.deliveryAddress && <p><strong>外送地址：</strong><span>{orderData.deliveryAddress}</span></p>}
+                        {orderData.notes && <p><strong>备注：</strong><span>{orderData.notes}</span></p>}
+                    </div>
+                    <div className="my-8">
+                        <p className="text-lg font-bold mb-4">📱 分享订单资讯</p>
+                        <a href={`https://line.me/R/msg/text/?${encodeURIComponent(shareTextContent)}`} target="_blank" rel="noopener noreferrer" className="inline-block my-4 p-2.5 bg-[#06c755] rounded-lg clickable-btn">
+                            <img src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png" alt="分享到 LINE" className="h-10" />
+                        </a>
+                        <div className="mt-6">
+                            <button onClick={copyShareText} className="bg-blue-500 text-white border-none py-2 px-5 rounded-md cursor-pointer hover:bg-blue-600 clickable-btn">📋 复制订单资讯</button>
+                        </div>
+                    </div>
+                    <button onClick={onNewOrder} className="bg-green-600 text-white border-none py-3 px-8 rounded-md cursor-pointer text-base mt-5 hover:bg-green-700 clickable-btn">📝 再订一单</button>
+                </div>
+            );
+        };
+
+        // 订餐页面
+        const OrderPage = ({ menuItems, onSubmitOrder, showNotification, onViewHistory }) => {
+            const { profile, liffStatus, statusType } = useLiff();
+            const [cart, setCart] = useState([]);
+            const [isLoading, setIsLoading] = useState(false);
+            const [customerName, setCustomerName] = useState('');
+            const [customerPhone, setCustomerPhone] = useState('');
+            const [pickupDate, setPickupDate] = useState('');
+            const [pickupTime, setPickupTime] = useState('');
+            const [deliveryAddress, setDeliveryAddress] = useState('');
+            const [notes, setNotes] = useState('');
+
+            useEffect(() => {
+                const now = new Date();
+                const today = now.toISOString().split('T')[0];
+                setPickupDate(today);
+                
+                now.setMinutes(now.getMinutes() + 30);
+                const minutes = Math.ceil(now.getMinutes() / 30) * 30;
+                now.setMinutes(minutes);
+                const timeString = now.toTimeString().slice(0, 5);
+                setPickupTime(timeString);
+            }, []);
+
+            useEffect(() => {
+                if (profile?.displayName) {
+                    setCustomerName(profile.displayName);
+                }
+            }, [profile]);
+
+            const { subtotal, deliveryFee, totalAmount } = useMemo(() => {
+                const sub = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+                const fee = deliveryAddress.trim() ? deliveryFee : 0;
+                return { subtotal: sub, deliveryFee: fee, totalAmount: sub + fee };
+            }, [cart, deliveryAddress]);
+
+            const updateCart = (itemName, change) => {
+                setCart(prevCart => {
+                    const existingIndex = prevCart.findIndex(item => item.name === itemName);
+                    
+                    if (existingIndex === -1) {
+                        if (change > 0) {
+                            const menuItem = menuItems.find(item => item.name === itemName);
+                            return menuItem ? [...prevCart, { ...menuItem, quantity: 1 }] : prevCart;
+                        }
+                        return prevCart;
+                    }
+                    
+                    const newCart = [...prevCart];
+                    const currentQuantity = newCart[existingIndex].quantity;
+                    const newQuantity = currentQuantity + change;
+                    
+                    if (newQuantity <= 0) {
+                        newCart.splice(existingIndex, 1);
+                    } else {
+                        newCart[existingIndex] = { ...newCart[existingIndex], quantity: newQuantity };
+                    }
+                    
+                    return newCart;
+                });
+            };
+
+            const getItemQuantity = (itemName) => {
+                const item = cart.find(item => item.name === itemName);
+                return item ? item.quantity : 0;
+            };
+
+            const clearCart = () => {
+                if (window.confirm('确定要清空购物车吗？')) {
+                    setCart([]);
+                }
+            };
+
+            const getDateOptions = () => {
+                const dates = [];
+                const today = new Date();
+                
+                for (let i = 0; i < 7; i++) {
+                    const date = new Date(today);
+                    date.setDate(today.getDate() + i);
+                    dates.push({
+                        value: date.toISOString().split('T')[0],
+                        label: date.toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'short' })
+                    });
+                }
+                
+                return dates;
+            };
+
+            const getTimeOptions = () => {
+                const times = [];
+                for (let hour = 10; hour <= 21; hour++) {
+                    for (let minute = 0; minute < 60; minute += 30) {
+                        times.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
+                    }
+                }
+                return times;
+            };
+
+            const getFullPickupTime = () => {
+                return pickupDate && pickupTime ? `${pickupDate}T${pickupTime}` : '';
+            };
+
+            const validateForm = () => {
+                if (!customerName.trim()) {
+                    showNotification('请填写姓名', 'error');
+                    return false;
+                }
+                if (!/^09\d{8}$/.test(customerPhone)) {
+                    showNotification('请输入有效的10位手机号码 (09开头)', 'error');
+                    return false;
+                }
+                if (!pickupDate || !pickupTime) {
+                    showNotification('请选择取餐日期和时间', 'error');
+                    return false;
+                }
+                if (cart.length === 0) {
+                    showNotification('请至少选择一个餐点', 'error');
+                    return false;
+                }
+                return true;
+            };
+
+            const handleSubmit = async () => {
+                if (!validateForm()) return;
+                
+                setIsLoading(true);
+                try {
+                    const orderData = { 
+                        customerName, 
+                        customerPhone,
+                        items: cart, 
+                        pickupTime: getFullPickupTime(), 
+                        deliveryAddress, 
+                        notes,
+                        totalAmount
+                    };
+                    
+                    await onSubmitOrder(orderData);
+                } catch (error) {
+                    // 错误在父组件处理
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const statusClasses = { 
+                info: 'bg-blue-100 border-blue-400 text-blue-800', 
+                success: 'bg-green-100 border-green-400 text-green-800', 
+                warning: 'bg-yellow-100 border-yellow-400 text-yellow-800', 
+                error: 'bg-red-100 border-red-400 text-red-800' 
+            };
+
+            const dateOptions = getDateOptions();
+            const timeOptions = getTimeOptions();
+
+            return (
+                <div className="animate-fade-in">
+                    <div className={`p-3 rounded-lg text-sm text-center border ${statusClasses[statusType]}`}>{liffStatus}</div>
+                    
+                    <button onClick={onViewHistory} className="w-full text-center p-2.5 border border-blue-500 text-blue-600 rounded-md text-sm hover:bg-blue-500 hover:text-white transition-colors duration-200 mt-4 clickable-btn">
+                        🕒 查询历史订单
+                    </button>
+                    
+                    <div className="space-y-4 mt-4">
+                        <div>
+                            <label className="block mb-2 font-bold text-gray-700 text-sm">姓名 <span className="text-red-500">*</span></label>
+                            <input 
+                                type="text" 
+                                value={customerName} 
+                                onChange={(e) => setCustomerName(e.target.value)} 
+                                placeholder="自动带入 LINE 名称" 
+                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block mb-2 font-bold text-gray-700 text-sm">手机号码 <span className="text-red-500">*</span></label>
+                            <input 
+                                type="tel" 
+                                value={customerPhone} 
+                                onChange={(e) => setCustomerPhone(e.target.value)} 
+                                placeholder="0936220000"
+                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">请输入09开头的10位手机号码</p>
+                        </div>
+                        
+                        <div>
+                            <label className="block mb-2 font-bold text-gray-700 text-sm">取餐日期 <span className="text-red-500">*</span></label>
+                            <select 
+                                value={pickupDate} 
+                                onChange={(e) => setPickupDate(e.target.value)}
+                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                            >
+                                <option value="">请选择取餐日期</option>
+                                {dateOptions.map(date => (
+                                    <option key={date.value} value={date.value}>{date.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label className="block mb-2 font-bold text-gray-700 text-sm">取餐时间 <span className="text-red-500">*</span></label>
+                            <select 
+                                value={pickupTime} 
+                                onChange={(e) => setPickupTime(e.target.value)}
+                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                            >
+                                <option value="">请选择取餐时间</option>
+                                {timeOptions.map(time => (
+                                    <option key={time} value={time}>{time}</option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1">营业时间: 10:00 - 21:00</p>
+                        </div>
+                        
+                        <div>
+                            <label className="block mb-2 font-bold text-gray-700 text-sm">外送地点 (选填)</label>
+                            <input 
+                                type="text" 
+                                value={deliveryAddress} 
+                                onChange={(e) => setDeliveryAddress(e.target.value)} 
+                                placeholder="如需外送请填写地址" 
+                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">※ 填写地址将计算 ${deliveryFee} 外送费</p>
+                        </div>
+                        
+                        <div>
+                            <label className="block mb-2 font-bold text-gray-700 text-sm">备注 (选填)</label>
+                            <textarea 
+                                value={notes} 
+                                onChange={(e) => setNotes(e.target.value)} 
+                                rows={2} 
+                                placeholder="例如：不要香菜、加辣等" 
+                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-4">
+                        <h2 className="text-center text-lg font-bold text-gray-800 mb-4">📝 选择餐点</h2>
+                        <div className="space-y-3">
+                            {menuItems.map(item => (
+                                <MenuItem
+                                    key={item.name}
+                                    item={item}
+                                    cartQuantity={getItemQuantity(item.name)}
+                                    onUpdateCart={updateCart}
+                                />
+                            ))}
+                        </div>
+                    </div>
+
+                    {cart.length > 0 && (
+                        <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 mt-4">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-lg font-bold text-gray-800">
+                                    🛒 订单明细 ({cart.reduce((sum, item) => sum + item.quantity, 0)} 项)
+                                </h2>
+                                <button onClick={clearCart} className="text-xs bg-red-100 text-red-600 hover:bg-red-500 hover:text-white font-semibold py-1 px-3 rounded-full clickable-btn">
+                                    🗑️ 清空
+                                </button>
+                            </div>
+                            
+                            <div className="space-y-2">
+                                {cart.map(item => (
+                                    <div key={item.name} className="flex justify-between items-center py-2 border-b border-gray-200">
+                                        <div>
+                                            <p className="font-bold text-gray-800 text-sm">{item.icon} {item.name}</p>
+                                            <p className="text-xs text-gray-500">${item.price} x {item.quantity}</p>
+                                        </div>
+                                        <p className="font-bold text-green-600">${item.price * item.quantity}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className="bg-green-50 p-4 rounded-lg border border-green-200 space-y-2 mt-4">
+                        <div className="flex justify-between text-sm text-gray-600">
+                            <span>餐点总计:</span>
+                            <span>${subtotal}</span>
+                        </div>
+                        {deliveryFee > 0 && (
+                            <div className="flex justify-between text-sm text-gray-600">
+                                <span>外送费:</span>
+                                <span>${deliveryFee}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between font-bold text-lg text-gray-800 border-t border-gray-300 pt-3 mt-3">
+                            <span>总金额:</span>
+                            <span>${totalAmount}</span>
+                        </div>
+                    </div>
+                    
+                    <div className="mt-6">
+                        <button 
+                            onClick={handleSubmit} 
+                            disabled={cart.length === 0 || isLoading}
+                            className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg text-lg disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center clickable-btn"
+                        >
+                            {isLoading ? <><LoadingSpinner /><span>处理中...</span></> : <span>✅ 送出订单</span>}
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // 主应用组件
+        const App = () => {
+            const [view, setView] = useState('order');
+            const [submittedOrder, setSubmittedOrder] = useState(null);
+            const [notification, setNotification] = useState({ message: '', type: 'success', visible: false });
+            const [menuItems, setMenuItems] = useState([]);
+            const [isMenuLoading, setIsMenuLoading] = useState(true);
+
+            const showNotification = useCallback((message, type = 'success') => {
+                setNotification({ message, type, visible: true });
+            }, []);
+
+            useEffect(() => {
+                const fetchMenu = async () => {
+                    try {
+                        const items = await apiService.getMenu();
+                        setMenuItems(items);
+                    } catch (error) {
+                        setMenuItems(defaultMenu);
+                    } finally {
+                        setIsMenuLoading(false);
+                    }
+                };
+                fetchMenu();
+            }, []);
+
+            const handleSubmitOrder = async (orderData) => {
+                try {
+                    const result = await apiService.submitOrder(orderData);
+                    const finalOrderData = { 
+                        ...orderData, 
+                        orderId: result.data?.orderId || 'ORD_' + Date.now()
+                    };
+                    setSubmittedOrder(finalOrderData);
+                    setView('success');
+                    showNotification('订单提交成功！');
+                } catch (error) {
+                    showNotification(`订单提交失败：${error.message}`, 'error');
+                    throw error;
+                }
+            };
+
+            const handleNewOrder = () => {
+                setSubmittedOrder(null);
+                setView('order');
+            };
+
+            const renderContent = () => {
+                if (isMenuLoading) {
+                    return (
+                        <div className="text-center py-20 flex flex-col items-center justify-center text-gray-600">
+                            <LoadingSpinner />
+                            <p className="mt-3 text-sm">正在载入菜单...</p>
+                        </div>
+                    );
+                }
+
+                switch(view) {
+                    case 'history':
+                        return <HistoryPage onBack={() => setView('order')} showNotification={showNotification} />;
+                    case 'success':
+                        return submittedOrder && <SuccessPage orderData={submittedOrder} onNewOrder={handleNewOrder} showNotification={showNotification} />;
+                    default:
+                        return <OrderPage menuItems={menuItems} onSubmitOrder={handleSubmitOrder} showNotification={showNotification} onViewHistory={() => setView('history')} />;
+                }
+            };
+
+            return (
+                <div className="p-4 min-h-screen flex items-center justify-center">
+                    <div className="container max-w-md mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="bg-[#fff3cd] border border-[#ffeaa7] rounded-t-2xl p-2.5 text-xs text-center text-[#856404]">
+                            <span role="img" aria-label="lock">🔒</span> 安全订餐系统 - 24小时接受预订
+                        </div>
+
+                        <header className="bg-green-500 text-white p-5 text-center relative">
+                            <h1 className="text-2xl font-bold mb-1">🍜 台湾小吃店</h1>
+                            <p className="text-sm opacity-90">LINE 快速订餐 - 24小时服务</p>
+                        </header>
+
+                        <main className="p-5 space-y-4">
+                            <Notification 
+                                message={notification.message} 
+                                type={notification.type} 
+                                visible={notification.visible} 
+                                onClose={() => setNotification(prev => ({ ...prev, visible: false }))} 
+                            />
+                            {renderContent()}
+                        </main>
+                        
+                        <footer className="bg-gray-100 p-4 text-center text-xs text-gray-500 border-t border-gray-200">
+                            <p>📍 营业时间: 10:00 - 21:00 | 📞 联络电话: 02-1234-5678</p>
+                        </footer>
+                    </div>
+                </div>
+            );
+        };
+
+        // 渲染应用
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
