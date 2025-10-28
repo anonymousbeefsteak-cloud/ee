@@ -87,9 +87,10 @@
         const { useState, useCallback, useEffect, useMemo } = React;
 
         // 配置 - 請更新為您的實際資訊
-        const LIFF_ID = '2008316489-6nMjb0KX';
-        const API_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxR1gzQgV1jq8DUhYX8EY0EmA6i2PBnjo_IZJUuwRgj7Ggjgro8Mdbnic7ZdhIIc2B1/exec';
-        const DELIVERY_FEE = 30;
+       // 配置 - 從環境變數讀取
+const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID;
+const API_ENDPOINT = process.env.NEXT_PUBLIC_API_ENDPOINT;
+const DELIVERY_FEE = 30;
 
         // 默認菜單
         const DEFAULT_MENU = [
