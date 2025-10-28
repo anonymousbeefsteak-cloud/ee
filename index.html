@@ -44,91 +44,73 @@
             transform: scale(0.95);
             opacity: 0.8;
         }
+        .fullscreen-image-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 20px;
+        }
+        .fullscreen-image-modal img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .fullscreen-image-modal button {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
     <script type="text/babel">
-        // 安全检查 - 防止直接访问
-        if (!window.location.href.includes('line.me') && !window.location.href.includes('localhost') && !window.location.href.includes('127.0.0.1')) {
-            document.write('<div style="text-align: center; padding: 50px; font-family: Arial, sans-serif;">');
-            document.write('<h1 style="color: #d32f2f; font-size: 24px;">⚠️ 安全警告</h1>');
-            document.write('<p style="margin-top: 20px; font-size: 18px;">此應用程式僅可在 LINE App 中開啟</p>');
-            document.write('<p style="margin-top: 10px; color: #666;">請透過 LINE 官方帳號或掃描 QR Code 進入</p>');
-            document.write('</div>');
-            throw new Error('Unauthorized access');
-        }
-
         const { useState, useCallback, useEffect, useMemo } = React;
 
-        // 配置 - 從環境變數讀取，如果沒有則使用預設值
-        const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID || '';
-        const API_ENDPOINT = process.env.NEXT_PUBLIC_API_ENDPOINT || '';
+        // 配置 - 請更新為您的實際資訊
+        const LIFF_ID = '2008316489-6nMjb0KX';
+        const API_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxR1gzQgV1jq8DUhYX8EY0EmA6i2PBnjo_IZJUuwRgj7Ggjgro8Mdbnic7ZdhIIc2B1/exec';
         const DELIVERY_FEE = 30;
-        const APP_ENV = process.env.NEXT_PUBLIC_APP_ENV || 'production';
-        const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
-
-        // 安全檢查 - 確保環境變數已設定
-        const checkEnvVariables = () => {
-            const missingEnv = [];
-            if (!LIFF_ID) missingEnv.push('NEXT_PUBLIC_LIFF_ID');
-            if (!API_ENDPOINT) missingEnv.push('NEXT_PUBLIC_API_ENDPOINT');
-            if (APP_ENV === 'production' && !RECAPTCHA_SITE_KEY) missingEnv.push('NEXT_PUBLIC_RECAPTCHA_SITE_KEY');
-            
-            if (missingEnv.length > 0) {
-                console.error('Missing required environment variables:', missingEnv);
-                return false;
-            }
-            return true;
-        };
 
         // 默認菜單
         const DEFAULT_MENU = [
-            { name: '滷肉飯', price: 35, icon: '🍚', status: '供應中' },
-            { name: '雞肉飯', price: 40, icon: '🍗', status: '供應中' },
-            { name: '蚵仔煎', price: 65, icon: '🍳', status: '供應中' },
-            { name: '大腸麵線', price: 50, icon: '🍜', status: '供應中' },
-            { name: '珍珠奶茶', price: 45, icon: '🥤', status: '供應中' }
+            { name: '滷肉飯', price: 35, icon: '🍚', status: '供應中', image: 'https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=400&h=300&fit=crop' },
+            { name: '雞肉飯', price: 40, icon: '🍗', status: '供應中', image: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=400&h=300&fit=crop' },
+            { name: '蚵仔煎', price: 65, icon: '🍳', status: '供應中', image: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=400&h=300&fit=crop' },
+            { name: '大腸麵線', price: 50, icon: '🍜', status: '供應中', image: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=300&fit=crop' },
+            { name: '珍珠奶茶', price: 45, icon: '🥤', status: '供應中', image: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=400&h=300&fit=crop' }
         ];
 
         // API 服務
         const apiService = {
             async request(payload) {
                 try {
-                    // 安全檢查 - 防止空請求
-                    if (!payload || Object.keys(payload).length === 0) {
-                        throw new Error('Invalid request payload');
-                    }
-                    
-                    // 添加請求時間戳和隨機數，防止重放攻擊
-                    const requestId = 'REQ_' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
-                    const timestamp = Date.now();
-                    
-                    // 準備請求數據
-                    const requestData = {
-                        ...payload,
-                        requestId,
-                        timestamp,
-                        client: 'LINE_LIFF_APP',
-                        version: '1.0.0'
-                    };
-                    
-                    console.log('發送請求到 API:', {
-                        endpoint: API_ENDPOINT,
-                        requestId,
-                        timestamp
-                    });
-                    
+                    console.log('發送請求:', payload.action);
                     const response = await fetch(API_ENDPOINT, {
                         method: 'POST',
                         headers: { 
-                            'Content-Type': 'application/json',
-                            'X-Request-ID': requestId,
-                            'X-Timestamp': timestamp,
-                            'X-Client': 'LINE_LIFF_APP',
-                            'X-Version': '1.0.0'
+                            'Content-Type': 'text/plain;charset=utf-8',
                         },
-                        body: JSON.stringify(requestData)
+                        body: JSON.stringify(payload)
                     });
                     
                     if (!response.ok) {
@@ -136,16 +118,11 @@
                     }
                     
                     const result = await response.json();
-                    
-                    // 驗證回應
-                    if (!result || !result.success) {
-                        throw new Error(result.message || 'API 請求失敗');
-                    }
-                    
+                    console.log('收到回應:', result);
                     return result;
                 } catch (error) {
                     console.error('API 請求失敗:', error);
-                    throw new Error('網路連線失敗，請檢查網路連線');
+                    throw new Error('網路連線失敗，請檢查網路連線和伺服器狀態');
                 }
             },
 
@@ -162,90 +139,54 @@
                 }
             },
             
-            async submitOrder(orderData, idToken, recaptchaToken) {
-                try {
-                    // 安全檢查
-                    if (!idToken) {
-                        throw new Error('使用者未授權');
-                    }
-                    
-                    if (APP_ENV === 'production' && !recaptchaToken) {
-                        throw new Error('驗證碼驗證失敗');
-                    }
-                    
-                    // 準備發送到 API 的資料
-                    const orderDataForServer = {
-                        action: 'createOrder',
-                        customerName: orderData.customerName.trim(),
-                        customerPhone: orderData.customerPhone.trim(),
-                        items: orderData.items.map(item => `${item.name} x${item.quantity}`).join(', '),
-                        itemsDetail: orderData.items.map(item => ({
-                            name: item.name,
-                            quantity: item.quantity,
-                            price: item.price
-                        })),
-                        totalAmount: orderData.totalAmount,
-                        pickupTime: orderData.pickupTime,
-                        deliveryAddress: orderData.deliveryAddress.trim(),
-                        notes: orderData.notes.trim(),
-                        orderId: 'ORD_' + Date.now(),
-                        idToken: idToken,
-                        recaptchaToken: recaptchaToken
-                    };
+            async submitOrder(orderData, idToken) {
+                // 確保電話號碼保持原樣，不進行任何轉換
+                const orderDataForServer = {
+                    customerName: orderData.customerName.trim(),
+                    customerPhone: orderData.customerPhone.trim(), // 保持原樣 0936220000
+                    items: orderData.items.map(item => ({ 
+                        name: item.name, 
+                        quantity: item.quantity,
+                        price: item.price 
+                    })),
+                    pickupTime: orderData.pickupTime,
+                    deliveryAddress: orderData.deliveryAddress.trim(),
+                    notes: orderData.notes.trim()
+                };
 
-                    console.log('提交訂單數據:', {
-                        orderId: orderDataForServer.orderId,
-                        customerName: orderDataForServer.customerName,
-                        itemsCount: orderData.items.length,
-                        totalAmount: orderDataForServer.totalAmount
-                    });
+                console.log('提交訂單數據:', orderDataForServer);
 
-                    const result = await this.request(orderDataForServer);
+                const result = await this.request({ 
+                    action: 'createOrder', 
+                    idToken: idToken,
+                    orderData: orderDataForServer 
+                });
 
-                    if (!result.success) {
-                        throw new Error(result.message || '訂單提交失敗');
-                    }
-
-                    return {
-                        ...result,
-                        data: {
-                            orderId: orderDataForServer.orderId,
-                            totalAmount: orderData.totalAmount
-                        }
-                    };
-                } catch (error) {
-                    console.error('提交訂單失敗:', error);
-                    throw error;
+                if (!result.success) {
+                    throw new Error(result.message || '訂單提交失敗');
                 }
+
+                return result;
             },
 
-            async getOrders(params, idToken) {
-                try {
-                    // 安全檢查
-                    if (!idToken) {
-                        throw new Error('使用者未授權');
-                    }
-                    
-                    const searchParams = {
-                        action: 'getOrders',
-                        customerName: params.customerName.trim(),
-                        customerPhone: params.customerPhone ? params.customerPhone.trim() : '',
-                        startDate: params.startDate,
-                        endDate: params.endDate,
-                        idToken: idToken
-                    };
+            async getOrders(params) {
+                // 搜尋時也使用原始電話號碼進行精確匹配
+                const searchParams = {
+                    ...params,
+                    customerPhone: params.customerPhone ? params.customerPhone.trim() : '', // 保持原樣
+                    exactMatch: true
+                };
 
-                    const result = await this.request(searchParams);
+                const result = await this.request({ 
+                    action: 'getOrders', 
+                    ...searchParams 
+                });
 
-                    if (!result.success) {
-                        throw new Error(result.message || '查詢失敗');
-                    }
-
-                    return result.data || [];
-                } catch (error) {
-                    console.error('查詢訂單失敗:', error);
-                    throw error;
+                if (!result.success) {
+                    throw new Error(result.message || '查詢失敗');
                 }
+
+                return result.data || [];
             }
         };
 
@@ -260,20 +201,7 @@
             useEffect(() => {
                 const initializeLiff = async () => {
                     try {
-                        console.log('正在初始化 LINE LIFF...');
-                        
-                        // 安全檢查 - 確保 LIFF SDK 已載入
-                        if (!window.liff) {
-                            throw new Error('LINE SDK 載入失敗');
-                        }
-                        
                         await liff.init({ liffId: LIFF_ID });
-                        
-                        // 安全檢查 - 確保在 LINE 環境中運行
-                        if (!liff.isInClient() && !liff.isLoggedIn()) {
-                            throw new Error('請在 LINE App 中開啟以獲得完整功能');
-                        }
-                        
                         if (liff.isLoggedIn()) {
                             setIsLoggedIn(true);
                             const [userProfile, token] = await Promise.all([
@@ -285,8 +213,13 @@
                             setLiffStatus(`👋 歡迎，${userProfile.displayName}！`);
                             setStatusType('success');
                         } else {
-                            setLiffStatus('請在 LINE App 中開啟以獲得完整功能。');
-                            setStatusType('warning');
+                            if (liff.isInClient()) {
+                                setLiffStatus('未登入 LINE，正在嘗試登入...');
+                                liff.login();
+                            } else {
+                                setLiffStatus('請在 LINE App 中開啟以獲得完整功能。');
+                                setStatusType('warning');
+                            }
                         }
                     } catch (error) {
                         console.warn('LINE 初始化失敗:', error);
@@ -295,7 +228,12 @@
                     }
                 };
                 
-                initializeLiff();
+                if (window.liff) {
+                    initializeLiff();
+                } else {
+                    setLiffStatus('⚠️ LINE SDK 載入失敗，但您仍可訂餐。');
+                    setStatusType('warning');
+                }
             }, []);
 
             return { profile, idToken, isLoggedIn, liffStatus, statusType };
@@ -337,37 +275,77 @@
             );
         };
 
+        // 全螢幕圖片模態框組件
+        const FullscreenImageModal = ({ imageUrl, isOpen, onClose }) => {
+            if (!isOpen) return null;
+
+            return (
+                <div className="fullscreen-image-modal animate-fade-in">
+                    <button onClick={onClose} className="clickable-btn">✕</button>
+                    <img src={imageUrl} alt="菜品圖片" className="rounded-lg" />
+                </div>
+            );
+        };
+
         // 菜品項目組件
         const MenuItem = ({ item, cartQuantity, onUpdateCart }) => {
+            const [showImage, setShowImage] = useState(false);
+
             return (
-                <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-3">
-                    <div className="flex justify-between items-start mb-3">
-                        <div>
-                            <h3 className="font-bold text-gray-800 text-sm">{item.icon} {item.name}</h3>
-                            <p className="text-green-600 font-bold text-sm">${item.price}</p>
+                <>
+                    <div className="bg-white rounded-lg p-4 border border-gray-200 shadow-sm mb-3">
+                        <div className="flex items-center gap-3">
+                            <div 
+                                className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden cursor-pointer clickable-btn"
+                                onClick={() => setShowImage(true)}
+                            >
+                                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                            </div>
+                            
+                            <div className="flex-1">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                        <h3 className="font-bold text-gray-800 text-sm">{item.icon} {item.name}</h3>
+                                        <p className="text-green-600 font-bold text-sm">${item.price}</p>
+                                    </div>
+                                    <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">
+                                        {item.status}
+                                    </span>
+                                </div>
+                                
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={() => onUpdateCart(item.name, -1)}
+                                        disabled={cartQuantity === 0}
+                                        className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold clickable-btn ${
+                                            cartQuantity === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'
+                                        }`}
+                                    >-</button>
+                                    
+                                    <span className="min-w-8 text-center font-bold text-lg">{cartQuantity}</span>
+                                    
+                                    <button
+                                        onClick={() => onUpdateCart(item.name, 1)}
+                                        className="w-8 h-8 rounded-full bg-green-500 text-white font-bold hover:bg-green-600 clickable-btn"
+                                    >+</button>
+                                    
+                                    <button
+                                        onClick={() => setShowImage(true)}
+                                        className="ml-2 text-xs text-blue-600 hover:text-blue-800 clickable-btn"
+                                    >看圖片</button>
+                                </div>
+                            </div>
                         </div>
-                        <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-800">
-                            {item.status}
-                        </span>
                     </div>
-                    
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => onUpdateCart(item.name, -1)}
-                            disabled={cartQuantity === 0}
-                            className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold clickable-btn ${
-                                cartQuantity === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-500 hover:bg-red-600'
-                            }`}
-                        >-</button>
-                        
-                        <span className="min-w-8 text-center font-bold text-lg">{cartQuantity}</span>
-                        
-                        <button
-                            onClick={() => onUpdateCart(item.name, 1)}
-                            className="w-8 h-8 rounded-full bg-green-500 text-white font-bold hover:bg-green-600 clickable-btn"
-                        >+</button>
-                    </div>
-                </div>
+
+                    {showImage && (
+                        <FullscreenImageModal
+                            imageUrl={item.image}
+                            isOpen={showImage}
+                            onClose={() => setShowImage(false)}
+                        />
+                    )}
+                </>
             );
         };
 
@@ -382,36 +360,54 @@
             const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
             const [customerName, setCustomerName] = useState('');
             const [customerPhone, setCustomerPhone] = useState('');
+            const [nameError, setNameError] = useState('');
+            const [phoneError, setPhoneError] = useState('');
             const [orders, setOrders] = useState([]);
             const [isLoading, setIsLoading] = useState(false);
 
+            const isLineUser = !!idToken;
+
             useEffect(() => {
-                if (profile?.displayName) {
+                if (profile?.displayName && isLineUser) {
                     setCustomerName(profile.displayName);
                 }
-            }, [profile]);
+            }, [profile, isLineUser]);
 
             const handleSearch = async () => {
-                if (!customerName.trim()) {
-                    showNotification('請輸入顧客姓名', 'error');
-                    return;
-                }
+                setNameError('');
+                setPhoneError('');
                 
-                if (!idToken) {
-                    showNotification('請在 LINE App 中開啟以查詢訂單', 'error');
-                    return;
+                if (!isLineUser) {
+                    if (!customerName.trim()) {
+                        setNameError('請輸入顧客姓名');
+                        return;
+                    }
+                    if (!customerPhone.trim()) {
+                        setPhoneError('請輸入手機號碼');
+                        return;
+                    }
+                    if (!/^09\d{8}$/.test(customerPhone)) {
+                        setPhoneError('請輸入有效的10位手機號碼 (09開頭)');
+                        return;
+                    }
+                } else {
+                    if (!customerName.trim()) {
+                        setNameError('請輸入顧客姓名');
+                        return;
+                    }
                 }
                 
                 setIsLoading(true);
                 try {
                     const params = {
                         customerName: customerName.trim(),
-                        customerPhone: customerPhone.trim(),
+                        customerPhone: isLineUser ? '' : customerPhone.trim(), // 保持原樣傳遞
+                        idToken: idToken,
                         startDate: startDate,
                         endDate: endDate
                     };
 
-                    const result = await apiService.getOrders(params, idToken);
+                    const result = await apiService.getOrders(params);
                     setOrders(result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
                     showNotification(`找到 ${result.length} 筆訂單`, 'success');
                 } catch (error) {
@@ -420,6 +416,17 @@
                 } finally {
                     setIsLoading(false);
                 }
+            };
+
+            const getStatusBadge = (status) => {
+                const statusConfig = {
+                    'pending': { color: 'bg-yellow-100 text-yellow-800', text: '待確認' },
+                    'confirmed': { color: 'bg-blue-100 text-blue-800', text: '已確認' },
+                    'completed': { color: 'bg-green-100 text-green-800', text: '已完成' },
+                    'cancelled': { color: 'bg-red-100 text-red-800', text: '已取消' }
+                };
+                const config = statusConfig[status] || { color: 'bg-gray-100 text-gray-800', text: status };
+                return <span className={`px-2 py-1 rounded text-xs ${config.color}`}>{config.text}</span>;
             };
 
             return (
@@ -431,25 +438,32 @@
                     
                     <div className="grid grid-cols-1 gap-4 mb-4 p-4 bg-gray-50 rounded-lg border">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">顧客姓名 *</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">顧客姓名 <span className="text-red-500">*</span></label>
                             <input 
                                 type="text" 
                                 value={customerName} 
                                 onChange={e => setCustomerName(e.target.value)} 
-                                placeholder="請輸入完整姓名"
-                                className="w-full p-2 border border-gray-300 rounded-md" 
+                                placeholder={isLineUser ? "自動帶入 LINE 名稱" : "請輸入完整姓名"}
+                                className={`w-full p-2 border rounded-md ${nameError ? 'border-red-500' : 'border-gray-300'}`} 
                             />
+                            {nameError && <p className="text-red-500 text-xs mt-1">{nameError}</p>}
+                            <p className="text-xs text-gray-500 mt-1">📝 姓名必須與訂單完全一致</p>
                         </div>
                         
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">手機號碼</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                手機號碼 {!isLineUser && <span className="text-red-500">*</span>}
+                            </label>
                             <input 
                                 type="tel" 
                                 value={customerPhone} 
                                 onChange={e => setCustomerPhone(e.target.value)} 
-                                placeholder="0936123456"
-                                className="w-full p-2 border border-gray-300 rounded-md" 
+                                placeholder={isLineUser ? "LINE 用戶可選填" : "0936220000"}
+                                disabled={isLineUser}
+                                className={`w-full p-2 border rounded-md ${phoneError ? 'border-red-500' : 'border-gray-300'} ${isLineUser ? 'bg-gray-200 cursor-not-allowed' : ''}`} 
                             />
+                            {phoneError && <p className="text-red-500 text-xs mt-1">{phoneError}</p>}
+                            <p className="text-xs text-gray-500 mt-1">📱 電話號碼必須與訂單完全一致 (包含開頭0)</p>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-4">
@@ -465,7 +479,7 @@
                         
                         <div>
                             <button onClick={handleSearch} disabled={isLoading} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-400 flex items-center justify-center clickable-btn">
-                                {isLoading ? <><LoadingSpinner /><span>查詢中...</span></> : '🔍 搜尋訂單'}
+                                {isLoading ? <><LoadingSpinner /><span>查詢中...</span></> : '🔍 精確搜尋'}
                             </button>
                         </div>
                     </div>
@@ -474,6 +488,7 @@
                         {!isLoading && orders.length === 0 && (
                             <div className="text-center text-gray-500 py-10 italic">
                                 <p>請輸入搜尋條件進行查詢</p>
+                                <p className="text-sm mt-2">使用精確匹配方式搜尋</p>
                             </div>
                         )}
                         {orders.map(order => (
@@ -494,6 +509,7 @@
                                     <p><strong>下單時間:</strong> {new Date(order.createdAt).toLocaleString('zh-TW')}</p>
                                     <p><strong>預計取餐:</strong> {new Date(order.pickupTime).toLocaleString('zh-TW')}</p>
                                     <p><strong>訂單內容:</strong> {order.items}</p>
+                                    <p><strong>狀態:</strong> {getStatusBadge(order.status)}</p>
                                     {order.deliveryAddress && <p><strong>外送地址:</strong> {order.deliveryAddress}</p>}
                                     {order.notes && <p><strong>備註:</strong> {order.notes}</p>}
                                 </div>
@@ -555,6 +571,8 @@
             const [pickupTime, setPickupTime] = useState('');
             const [deliveryAddress, setDeliveryAddress] = useState('');
             const [notes, setNotes] = useState('');
+            const [phoneError, setPhoneError] = useState('');
+            const [timeError, setTimeError] = useState('');
 
             useEffect(() => {
                 const now = new Date();
@@ -648,23 +666,36 @@
             };
 
             const validateForm = () => {
-                if (!customerName.trim()) {
-                    showNotification('請填寫姓名', 'error');
-                    return false;
-                }
+                let isValid = true;
+                setPhoneError('');
+                setTimeError('');
+
+                // 嚴格驗證電話格式，必須是 09 開頭的 10 位數字
                 if (!/^09\d{8}$/.test(customerPhone)) {
-                    showNotification('請輸入有效的10位手機號碼 (09開頭)', 'error');
-                    return false;
+                    setPhoneError('請輸入有效的10位手機號碼 (09開頭)');
+                    isValid = false;
                 }
+
                 if (!pickupDate || !pickupTime) {
-                    showNotification('請選擇取餐日期和時間', 'error');
-                    return false;
+                    setTimeError('請選擇取餐日期和時間');
+                    isValid = false;
+                } else {
+                    const selectedDateTime = new Date(getFullPickupTime());
+                    const minDateTime = new Date();
+                    minDateTime.setMinutes(minDateTime.getMinutes() + 29);
+                    
+                    if (selectedDateTime < minDateTime) {
+                        setTimeError('取餐時間必須在30分鐘之後');
+                        isValid = false;
+                    }
                 }
+                
                 if (cart.length === 0) {
                     showNotification('請至少選擇一個餐點', 'error');
-                    return false;
+                    isValid = false;
                 }
-                return true;
+                
+                return isValid;
             };
 
             const handleSubmit = async () => {
@@ -672,17 +703,14 @@
                 
                 setIsLoading(true);
                 try {
-                    const orderData = { 
+                    await onSubmitOrder({ 
                         customerName, 
-                        customerPhone,
+                        customerPhone, // 保持原樣 0936220000
                         items: cart, 
                         pickupTime: getFullPickupTime(), 
                         deliveryAddress, 
-                        notes,
-                        totalAmount
-                    };
-                    
-                    await onSubmitOrder(orderData, idToken);
+                        notes 
+                    }, idToken);
                 } catch (error) {
                     // 錯誤在父組件處理
                 } finally {
@@ -727,8 +755,9 @@
                                 value={customerPhone} 
                                 onChange={(e) => setCustomerPhone(e.target.value)} 
                                 placeholder="0936220000"
-                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                                className={`w-full p-3 border rounded-lg text-sm focus:ring-green-500 focus:border-green-500 ${phoneError ? 'border-red-500' : 'border-gray-300'}`}
                             />
+                            {phoneError && <p className="text-red-500 text-xs mt-1">{phoneError}</p>}
                             <p className="text-xs text-gray-500 mt-1">請輸入09開頭的10位手機號碼</p>
                         </div>
                         
@@ -751,13 +780,14 @@
                             <select 
                                 value={pickupTime} 
                                 onChange={(e) => setPickupTime(e.target.value)}
-                                className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-green-500 focus:border-green-500"
+                                className={`w-full p-3 border rounded-lg text-sm focus:ring-green-500 focus:border-green-500 ${timeError ? 'border-red-500' : 'border-gray-300'}`}
                             >
                                 <option value="">請選擇取餐時間</option>
                                 {timeOptions.map(time => (
                                     <option key={time} value={time}>{time}</option>
                                 ))}
                             </select>
+                            {timeError && <p className="text-red-500 text-xs mt-1">{timeError}</p>}
                             <p className="text-xs text-gray-500 mt-1">營業時間: 10:00 - 21:00</p>
                         </div>
                         
@@ -861,21 +891,10 @@
             const [notification, setNotification] = useState({ message: '', type: 'success', visible: false });
             const [menuItems, setMenuItems] = useState([]);
             const [isMenuLoading, setIsMenuLoading] = useState(true);
-            const [envCheckPassed, setEnvCheckPassed] = useState(false);
 
             const showNotification = useCallback((message, type = 'success') => {
                 setNotification({ message, type, visible: true });
             }, []);
-
-            useEffect(() => {
-                // 檢查環境變數
-                const passed = checkEnvVariables();
-                setEnvCheckPassed(passed);
-                
-                if (!passed) {
-                    showNotification('環境變數配置不完整，請檢查設定', 'error');
-                }
-            }, [showNotification]);
 
             useEffect(() => {
                 const fetchMenu = async () => {
@@ -888,18 +907,16 @@
                         setIsMenuLoading(false);
                     }
                 };
-                
-                if (envCheckPassed) {
-                    fetchMenu();
-                }
-            }, [envCheckPassed]);
+                fetchMenu();
+            }, []);
 
             const handleSubmitOrder = async (orderData, idToken) => {
                 try {
                     const result = await apiService.submitOrder(orderData, idToken);
                     const finalOrderData = { 
                         ...orderData, 
-                        orderId: result.data?.orderId || 'ORD_' + Date.now()
+                        orderId: result.data?.orderId || 'TEST_' + Date.now(), 
+                        totalAmount: result.data?.totalAmount || orderData.items.reduce((sum, item) => sum + item.price * item.quantity, 0) + (orderData.deliveryAddress ? DELIVERY_FEE : 0)
                     };
                     setSubmittedOrder(finalOrderData);
                     setView('success');
@@ -916,22 +933,6 @@
             };
 
             const renderContent = () => {
-                if (!envCheckPassed) {
-                    return (
-                        <div className="text-center py-10">
-                            <h3 className="text-xl font-bold text-red-500 mb-4">⚠️ 應用程式配置錯誤</h3>
-                            <p className="text-gray-600 mb-6">環境變數配置不完整，請聯繫管理員檢查設定。</p>
-                            <div className="bg-gray-50 p-4 rounded-lg text-left text-sm">
-                                <p className="font-bold mb-2">需要配置的環境變數：</p>
-                                <ul className="list-disc list-inside space-y-1 text-gray-700">
-                                    <li>NEXT_PUBLIC_LIFF_ID - LINE LIFF 應用程式 ID</li>
-                                    <li>NEXT_PUBLIC_API_ENDPOINT - API 端點 URL</li>
-                                </ul>
-                            </div>
-                        </div>
-                    );
-                }
-
                 if (isMenuLoading) {
                     return (
                         <div className="text-center py-20 flex flex-col items-center justify-center text-gray-600">
