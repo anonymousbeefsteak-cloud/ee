@@ -86,18 +86,18 @@
     <script type="text/babel">
         const { useState, useCallback, useEffect, useMemo } = React;
 
-        // 配置 - 請更新為您的實際資訊
-        const LIFF_ID = '2008316489-6nMjb0KX';
-        const API_ENDPOINT = 'https://script.google.com/macros/s/AKfycbxR1gzQgV1jq8DUhYX8EY0EmA6i2PBnjo_IZJUuwRgj7Ggjgro8Mdbnic7ZdhIIc2B1/exec';
+        // 從環境變數讀取（Vercel 專用）
+        const LIFF_ID = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_LIFF_ID || '2008316489-6nMjb0KX';
+        const API_ENDPOINT = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_API_ENDPOINT || 'https://script.google.com/macros/s/AKfycbxR1gzQgV1jq8DUhYX8EY0EmA6i2PBnjo_IZJUuwRgj7Ggjgro8Mdbnic7ZdhIIc2B1/exec';
         const DELIVERY_FEE = 30;
 
         // 默認菜單
         const DEFAULT_MENU = [
-            { name: '滷肉飯', price: 35, icon: '🍚', status: '供應中', image: 'https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=400&h=300&fit=crop' },
-            { name: '雞肉飯', price: 40, icon: '🍗', status: '供應中', image: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=400&h=300&fit=crop' },
-            { name: '蚵仔煎', price: 65, icon: '🍳', status: '供應中', image: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=400&h=300&fit=crop' },
-            { name: '大腸麵線', price: 50, icon: '🍜', status: '供應中', image: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=300&fit=crop' },
-            { name: '珍珠奶茶', price: 45, icon: '🥤', status: '供應中', image: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=400&h=300&fit=crop' }
+            { name: '滷肉飯', price: 35, icon: 'rice', status: '供應中', image: 'https://images.unsplash.com/photo-1541519227354-08fa5d50c44d?w=400&h=300&fit=crop' },
+            { name: '雞肉飯', price: 40, icon: 'chicken', status: '供應中', image: 'https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=400&h=300&fit=crop' },
+            { name: '蚵仔煎', price: 65, icon: 'oyster', status: '供應中', image: 'https://images.unsplash.com/photo-1563245372-f21724e3856d?w=400&h=300&fit=crop' },
+            { name: '大腸麵線', price: 50, icon: 'noodles', status: '供應中', image: 'https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=400&h=300&fit=crop' },
+            { name: '珍珠奶茶', price: 45, icon: 'tea', status: '供應中', image: 'https://images.unsplash.com/photo-1572490122747-3968b75cc699?w=400&h=300&fit=crop' }
         ];
 
         // API 服務
@@ -140,10 +140,9 @@
             },
             
             async submitOrder(orderData, idToken) {
-                // 確保電話號碼保持原樣，不進行任何轉換
                 const orderDataForServer = {
                     customerName: orderData.customerName.trim(),
-                    customerPhone: orderData.customerPhone.trim(), // 保持原樣 0936220000
+                    customerPhone: orderData.customerPhone.trim(),
                     items: orderData.items.map(item => ({ 
                         name: item.name, 
                         quantity: item.quantity,
@@ -170,10 +169,9 @@
             },
 
             async getOrders(params) {
-                // 搜尋時也使用原始電話號碼進行精確匹配
                 const searchParams = {
                     ...params,
-                    customerPhone: params.customerPhone ? params.customerPhone.trim() : '', // 保持原樣
+                    customerPhone: params.customerPhone ? params.customerPhone.trim() : '',
                     exactMatch: true
                 };
 
@@ -195,7 +193,7 @@
             const [profile, setProfile] = useState(null);
             const [idToken, setIdToken] = useState(null);
             const [isLoggedIn, setIsLoggedIn] = useState(false);
-            const [liffStatus, setLiffStatus] = useState('🔄 初始化 LINE 功能中...');
+            const [liffStatus, setLiffStatus] = useState('初始化 LINE 功能中...');
             const [statusType, setStatusType] = useState('info');
 
             useEffect(() => {
@@ -210,7 +208,7 @@
                             ]);
                             setProfile(userProfile);
                             setIdToken(token);
-                            setLiffStatus(`👋 歡迎，${userProfile.displayName}！`);
+                            setLiffStatus(`歡迎，${userProfile.displayName}！`);
                             setStatusType('success');
                         } else {
                             if (liff.isInClient()) {
@@ -223,7 +221,7 @@
                         }
                     } catch (error) {
                         console.warn('LINE 初始化失敗:', error);
-                        setLiffStatus('⚠️ LINE 功能載入失敗，但您仍可訂餐。');
+                        setLiffStatus('LINE 功能載入失敗，但您仍可訂餐。');
                         setStatusType('warning');
                     }
                 };
@@ -231,7 +229,7 @@
                 if (window.liff) {
                     initializeLiff();
                 } else {
-                    setLiffStatus('⚠️ LINE SDK 載入失敗，但您仍可訂餐。');
+                    setLiffStatus('LINE SDK 載入失敗，但您仍可訂餐。');
                     setStatusType('warning');
                 }
             }, []);
@@ -281,7 +279,7 @@
 
             return (
                 <div className="fullscreen-image-modal animate-fade-in">
-                    <button onClick={onClose} className="clickable-btn">✕</button>
+                    <button onClick={onClose} className="clickable-btn">X</button>
                     <img src={imageUrl} alt="菜品圖片" className="rounded-lg" />
                 </div>
             );
@@ -401,7 +399,7 @@
                 try {
                     const params = {
                         customerName: customerName.trim(),
-                        customerPhone: isLineUser ? '' : customerPhone.trim(), // 保持原樣傳遞
+                        customerPhone: isLineUser ? '' : customerPhone.trim(),
                         idToken: idToken,
                         startDate: startDate,
                         endDate: endDate
@@ -447,7 +445,7 @@
                                 className={`w-full p-2 border rounded-md ${nameError ? 'border-red-500' : 'border-gray-300'}`} 
                             />
                             {nameError && <p className="text-red-500 text-xs mt-1">{nameError}</p>}
-                            <p className="text-xs text-gray-500 mt-1">📝 姓名必須與訂單完全一致</p>
+                            <p className="text-xs text-gray-500 mt-1">姓名必須與訂單完全一致</p>
                         </div>
                         
                         <div>
@@ -463,7 +461,7 @@
                                 className={`w-full p-2 border rounded-md ${phoneError ? 'border-red-500' : 'border-gray-300'} ${isLineUser ? 'bg-gray-200 cursor-not-allowed' : ''}`} 
                             />
                             {phoneError && <p className="text-red-500 text-xs mt-1">{phoneError}</p>}
-                            <p className="text-xs text-gray-500 mt-1">📱 電話號碼必須與訂單完全一致 (包含開頭0)</p>
+                            <p className="text-xs text-gray-500 mt-1">電話號碼必須與訂單完全一致 (包含開頭0)</p>
                         </div>
                         
                         <div className="grid grid-cols-2 gap-4">
@@ -479,7 +477,7 @@
                         
                         <div>
                             <button onClick={handleSearch} disabled={isLoading} className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-400 flex items-center justify-center clickable-btn">
-                                {isLoading ? <><LoadingSpinner /><span>查詢中...</span></> : '🔍 精確搜尋'}
+                                {isLoading ? <><LoadingSpinner /><span>查詢中...</span></> : '精確搜尋'}
                             </button>
                         </div>
                     </div>
@@ -524,7 +522,7 @@
         const SuccessPage = ({ orderData, onNewOrder, showNotification }) => {
             const formatDisplayTime = (timestamp) => new Date(timestamp).toLocaleString('zh-TW');
             
-            const shareTextContent = `🍽️ 台灣小吃店 - 訂單確認\n\n📋 訂單編號：${orderData.orderId}\n👤 顧客姓名：${orderData.customerName}\n📞 聯絡電話：${orderData.customerPhone}\n\n💰 最終總金額：$${orderData.totalAmount}\n⏰ 取餐時間：${formatDisplayTime(orderData.pickupTime)}\n📍 ${orderData.deliveryAddress ? `外送地址：${orderData.deliveryAddress}` : '自取'}\n📝 備註：${orderData.notes || '無'}\n\n📍 取餐地址：台灣小吃店\n🕒 營業時間：10:00-21:00\n📞 聯絡電話：02-1234-5678`;
+            const shareTextContent = `台灣小吃店 - 訂單確認\n\n訂單編號：${orderData.orderId}\n顧客姓名：${orderData.customerName}\n聯絡電話：${orderData.customerPhone}\n\n最終總金額：$${orderData.totalAmount}\n取餐時間：${formatDisplayTime(orderData.pickupTime)}\n${orderData.deliveryAddress ? `外送地址：${orderData.deliveryAddress}` : '自取'}\n備註：${orderData.notes || '無'}\n\n取餐地址：台灣小吃店\n營業時間：10:00-21:00\n聯絡電話：02-1234-5678`;
 
             const copyShareText = () => {
                 navigator.clipboard.writeText(shareTextContent)
@@ -534,7 +532,7 @@
 
             return (
                 <div className="text-center p-5 animate-fade-in">
-                    <div className="text-6xl mb-5">✅</div>
+                    <div className="text-6xl mb-5">Checkmark</div>
                     <h3 className="text-2xl font-bold text-green-600 mb-4">訂單提交成功！</h3>
                     <div className="bg-gray-50 p-4 rounded-lg my-5 text-left border">
                         <p><strong>訂單編號：</strong><span className="font-mono">{orderData.orderId}</span></p>
@@ -547,15 +545,15 @@
                         {orderData.notes && <p><strong>備註：</strong><span>{orderData.notes}</span></p>}
                     </div>
                     <div className="my-8">
-                        <p className="text-lg font-bold mb-4">📱 分享訂單資訊</p>
+                        <p className="text-lg font-bold mb-4">分享訂單資訊</p>
                         <a href={`https://line.me/R/msg/text/?${encodeURIComponent(shareTextContent)}`} target="_blank" rel="noopener noreferrer" className="inline-block my-4 p-2.5 bg-[#06c755] rounded-lg clickable-btn">
                             <img src="https://scdn.line-apps.com/n/line_add_friends/btn/zh-Hant.png" alt="分享到 LINE" className="h-10" />
                         </a>
                         <div className="mt-6">
-                            <button onClick={copyShareText} className="bg-blue-500 text-white border-none py-2 px-5 rounded-md cursor-pointer hover:bg-blue-600 clickable-btn">📋 複製訂單資訊</button>
+                            <button onClick={copyShareText} className="bg-blue-500 text-white border-none py-2 px-5 rounded-md cursor-pointer hover:bg-blue-600 clickable-btn">複製訂單資訊</button>
                         </div>
                     </div>
-                    <button onClick={onNewOrder} className="bg-green-600 text-white border-none py-3 px-8 rounded-md cursor-pointer text-base mt-5 hover:bg-green-700 clickable-btn">📝 再訂一單</button>
+                    <button onClick={onNewOrder} className="bg-green-600 text-white border-none py-3 px-8 rounded-md cursor-pointer text-base mt-5 hover:bg-green-700 clickable-btn">再訂一單</button>
                 </div>
             );
         };
@@ -670,7 +668,6 @@
                 setPhoneError('');
                 setTimeError('');
 
-                // 嚴格驗證電話格式，必須是 09 開頭的 10 位數字
                 if (!/^09\d{8}$/.test(customerPhone)) {
                     setPhoneError('請輸入有效的10位手機號碼 (09開頭)');
                     isValid = false;
@@ -705,7 +702,7 @@
                 try {
                     await onSubmitOrder({ 
                         customerName, 
-                        customerPhone, // 保持原樣 0936220000
+                        customerPhone,
                         items: cart, 
                         pickupTime: getFullPickupTime(), 
                         deliveryAddress, 
@@ -733,7 +730,7 @@
                     <div className={`p-3 rounded-lg text-sm text-center border ${statusClasses[statusType]}`}>{liffStatus}</div>
                     
                     <button onClick={onViewHistory} className="w-full text-center p-2.5 border border-blue-500 text-blue-600 rounded-md text-sm hover:bg-blue-500 hover:text-white transition-colors duration-200 mt-4 clickable-btn">
-                        🕒 查詢歷史訂單
+                        查詢歷史訂單
                     </button>
                     
                     <div className="space-y-4 mt-4">
@@ -816,7 +813,7 @@
                     </div>
                     
                     <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mt-4">
-                        <h2 className="text-center text-lg font-bold text-gray-800 mb-4">📝 選擇餐點</h2>
+                        <h2 className="text-center text-lg font-bold text-gray-800 mb-4">選擇餐點</h2>
                         <div className="space-y-3">
                             {menuItems.map(item => (
                                 <MenuItem
@@ -833,10 +830,10 @@
                         <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200 mt-4">
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-lg font-bold text-gray-800">
-                                    🛒 訂單明細 ({cart.reduce((sum, item) => sum + item.quantity, 0)} 項)
+                                    訂單明細 ({cart.reduce((sum, item) => sum + item.quantity, 0)} 項)
                                 </h2>
                                 <button onClick={clearCart} className="text-xs bg-red-100 text-red-600 hover:bg-red-500 hover:text-white font-semibold py-1 px-3 rounded-full clickable-btn">
-                                    🗑️ 清空
+                                    清空
                                 </button>
                             </div>
                             
@@ -877,7 +874,7 @@
                             disabled={cart.length === 0 || isLoading}
                             className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg text-lg disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center clickable-btn"
                         >
-                            {isLoading ? <><LoadingSpinner /><span>處理中...</span></> : <span>✅ 送出訂單</span>}
+                            {isLoading ? <><LoadingSpinner /><span>處理中...</span></> : <span>送出訂單</span>}
                         </button>
                     </div>
                 </div>
@@ -956,11 +953,11 @@
                 <div className="p-4 min-h-screen flex items-center justify-center">
                     <div className="container max-w-md mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
                         <div className="bg-[#fff3cd] border border-[#ffeaa7] rounded-t-2xl p-2.5 text-xs text-center text-[#856404]">
-                            <span role="img" aria-label="lock">🔒</span> 安全訂餐系統 - 24小時接受預訂
+                            <span role="img" aria-label="lock">Lock</span> 安全訂餐系統 - 24小時接受預訂
                         </div>
 
                         <header className="bg-green-500 text-white p-5 text-center relative">
-                            <h1 className="text-2xl font-bold mb-1">🍜 台灣小吃店</h1>
+                            <h1 className="text-2xl font-bold mb-1">台灣小吃店</h1>
                             <p className="text-sm opacity-90">LINE 快速訂餐 - 24小時服務</p>
                         </header>
 
@@ -975,7 +972,7 @@
                         </main>
                         
                         <footer className="bg-gray-100 p-4 text-center text-xs text-gray-500 border-t border-gray-200">
-                            <p>📍 營業時間: 10:00 - 21:00 | 📞 聯絡電話: 02-1234-5678</p>
+                            <p>營業時間: 10:00 - 21:00 | 聯絡電話: 02-1234-5678</p>
                         </footer>
                     </div>
                 </div>
