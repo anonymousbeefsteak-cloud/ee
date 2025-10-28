@@ -12,9 +12,6 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- 加载环境变量配置 -->
-    <script src="./config.js"></script>
-    
     <style>
         body {
             background-color: #f7fafc;
@@ -83,6 +80,18 @@
             cursor: pointer;
             backdrop-filter: blur(10px);
         }
+        .config-panel {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 10000;
+            max-width: 300px;
+        }
         .config-status {
             position: fixed;
             top: 10px;
@@ -97,39 +106,90 @@
     </style>
 </head>
 <body>
+    <!-- 配置面板 -->
+    <div id="configPanel" class="config-panel" style="display: none;">
+        <h3 class="font-bold mb-2">🔧 配置设置</h3>
+        <div class="space-y-1 text-xs">
+            <div>LIFF ID: <span id="currentLiffId" class="font-mono"></span></div>
+            <div>API端点: <span id="currentApiEndpoint" class="font-mono text-xs"></span></div>
+            <button onclick="toggleConfigPanel()" class="mt-2 bg-blue-500 text-white px-2 py-1 rounded text-xs">关闭</button>
+        </div>
+    </div>
+
     <!-- 配置状态显示 -->
     <div id="configStatus" class="config-status">
-        LIFF ID: <span id="liffStatus">检查中...</span>
+        <button onclick="toggleConfigPanel()" class="mr-2">⚙️</button>
+        LIFF: <span id="liffStatus">检查中...</span>
     </div>
 
     <div id="root"></div>
 
+    <script>
+        // 配置管理函数
+        function getConfigFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const config = {
+                LIFF_ID: urlParams.get('liff_id') || urlParams.get('liffId') || '2008316489-6nMjb0KX',
+                API_ENDPOINT: urlParams.get('api_endpoint') || urlParams.get('apiEndpoint') || 'https://script.google.com/macros/s/AKfycbxR1gzQgV1jq8DUhYX8EY0EmA6i2PBnjo_IZJUuwRgj7Ggjgro8Mdbnic7ZdhIIc2B1/exec',
+                DELIVERY_FEE: 30
+            };
+            
+            // 更新显示
+            document.getElementById('currentLiffId').textContent = config.LIFF_ID;
+            document.getElementById('currentApiEndpoint').textContent = config.API_ENDPOINT;
+            
+            const statusElement = document.getElementById('liffStatus');
+            if (config.LIFF_ID && config.LIFF_ID !== 'undefined') {
+                statusElement.textContent = '✅';
+                statusElement.style.color = '#10B981';
+            } else {
+                statusElement.textContent = '❌';
+                statusElement.style.color = '#EF4444';
+            }
+            
+            return config;
+        }
+
+        function toggleConfigPanel() {
+            const panel = document.getElementById('configPanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        function generateConfigURL() {
+            const liffId = prompt('请输入 LIFF ID:', window.ENV?.LIFF_ID || '2008316489-6nMjb0KX');
+            const apiEndpoint = prompt('请输入 API 端点:', window.ENV?.API_ENDPOINT || 'https://script.google.com/macros/s/AKfycbxR1gzQgV1jq8DUhYX8EY0EmA6i2PBnjo_IZJUuwRgj7Ggjgro8Mdbnic7ZdhIIc2B1/exec');
+            
+            if (liffId && apiEndpoint) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('liff_id', liffId);
+                url.searchParams.set('api_endpoint', apiEndpoint);
+                window.location.href = url.toString();
+            }
+        }
+
+        // 初始化配置
+        window.ENV = getConfigFromURL();
+        
+        // 显示配置信息
+        console.log('当前配置:', window.ENV);
+    </script>
+
     <script type="text/babel">
         const { useState, useCallback, useEffect, useMemo } = React;
 
-        // 从 window.ENV 获取配置
-        const LIFF_ID = window.ENV?.LIFF_ID;
-        const API_ENDPOINT = window.ENV?.API_ENDPOINT;
-        const DELIVERY_FEE = window.ENV?.DELIVERY_FEE || 30;
+        // 从 URL 参数获取配置
+        const getConfig = () => {
+            return window.ENV || {
+                LIFF_ID: '2008316489-6nMjb0KX',
+                API_ENDPOINT: 'https://script.google.com/macros/s/AKfycbxR1gzQgV1jq8DUhYX8EY0EmA6i2PBnjo_IZJUuwRgj7Ggjgro8Mdbnic7ZdhIIc2B1/exec',
+                DELIVERY_FEE: 30
+            };
+        };
 
-        // 更新配置状态显示
-        useEffect(() => {
-            const statusElement = document.getElementById('liffStatus');
-            if (statusElement) {
-                if (LIFF_ID && LIFF_ID !== 'undefined') {
-                    statusElement.textContent = '✅ 已配置';
-                    statusElement.style.color = '#10B981';
-                } else {
-                    statusElement.textContent = '❌ 未配置';
-                    statusElement.style.color = '#EF4444';
-                }
-            }
-        }, []);
-
-        // 检查配置
-        if (!LIFF_ID || LIFF_ID === 'undefined') {
-            console.error('LIFF_ID 未正确配置:', LIFF_ID);
-        }
+        const config = getConfig();
+        const LIFF_ID = config.LIFF_ID;
+        const API_ENDPOINT = config.API_ENDPOINT;
+        const DELIVERY_FEE = config.DELIVERY_FEE;
 
         // 默認菜單
         const DEFAULT_MENU = [
@@ -240,7 +300,7 @@
                 const initializeLiff = async () => {
                     try {
                         if (!LIFF_ID || LIFF_ID === 'undefined') {
-                            setLiffStatus('❌ LIFF ID 未配置，請檢查環境變數');
+                            setLiffStatus('❌ LIFF ID 未配置，請使用 URL 參數設置');
                             setStatusType('error');
                             return;
                         }
@@ -390,6 +450,68 @@
                         />
                     )}
                 </>
+            );
+        };
+
+        // 配置頁面組件
+        const ConfigPage = ({ onBack, onSaveConfig }) => {
+            const [liffId, setLiffId] = useState(LIFF_ID);
+            const [apiEndpoint, setApiEndpoint] = useState(API_ENDPOINT);
+
+            const handleSave = () => {
+                const url = new URL(window.location.href);
+                url.searchParams.set('liff_id', liffId);
+                url.searchParams.set('api_endpoint', apiEndpoint);
+                window.location.href = url.toString();
+            };
+
+            return (
+                <div className="animate-fade-in">
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-xl font-bold text-gray-800">系統配置</h2>
+                        <button onClick={onBack} className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 py-1 px-3 rounded-lg clickable-btn">返回訂餐</button>
+                    </div>
+                    
+                    <div className="bg-gray-50 p-4 rounded-lg border space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">LIFF ID</label>
+                            <input 
+                                type="text" 
+                                value={liffId} 
+                                onChange={(e) => setLiffId(e.target.value)} 
+                                placeholder="2008316489-6nMjb0KX"
+                                className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">從 LINE Developers Console 獲取的 LIFF ID</p>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">API 端點</label>
+                            <input 
+                                type="text" 
+                                value={apiEndpoint} 
+                                onChange={(e) => setApiEndpoint(e.target.value)} 
+                                placeholder="https://script.google.com/macros/s/..."
+                                className="w-full p-2 border border-gray-300 rounded-md text-sm"
+                            />
+                            <p className="text-xs text-gray-500 mt-1">Google Apps Script 部署的 Web App URL</p>
+                        </div>
+                        
+                        <div className="bg-blue-50 p-3 rounded border border-blue-200">
+                            <h3 className="font-bold text-blue-800 text-sm mb-2">使用說明</h3>
+                            <p className="text-xs text-blue-700">
+                                1. 從 LINE Developers Console 獲取 LIFF ID<br/>
+                                2. 部署 Google Apps Script 作為後端 API<br/>
+                                3. 填入正確的配置信息<br/>
+                                4. 點擊保存重新加載頁面
+                            </p>
+                        </div>
+                        
+                        <button onClick={handleSave} className="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg clickable-btn">
+                            💾 保存配置並重新加載
+                        </button>
+                    </div>
+                </div>
             );
         };
 
@@ -605,7 +727,7 @@
         };
 
         // 訂餐頁面
-        const OrderPage = ({ menuItems, onSubmitOrder, showNotification, onViewHistory }) => {
+        const OrderPage = ({ menuItems, onSubmitOrder, showNotification, onViewHistory, onViewConfig }) => {
             const { profile, idToken, liffStatus, statusType } = useLiff();
             const [cart, setCart] = useState([]);
             const [isLoading, setIsLoading] = useState(false);
@@ -775,9 +897,14 @@
                 <div className="animate-fade-in">
                     <div className={`p-3 rounded-lg text-sm text-center border ${statusClasses[statusType]}`}>{liffStatus}</div>
                     
-                    <button onClick={onViewHistory} className="w-full text-center p-2.5 border border-blue-500 text-blue-600 rounded-md text-sm hover:bg-blue-500 hover:text-white transition-colors duration-200 mt-4 clickable-btn">
-                        🕒 查詢歷史訂單
-                    </button>
+                    <div className="grid grid-cols-2 gap-2 mt-4">
+                        <button onClick={onViewHistory} className="text-center p-2.5 border border-blue-500 text-blue-600 rounded-md text-sm hover:bg-blue-500 hover:text-white transition-colors duration-200 clickable-btn">
+                            🕒 歷史訂單
+                        </button>
+                        <button onClick={onViewConfig} className="text-center p-2.5 border border-purple-500 text-purple-600 rounded-md text-sm hover:bg-purple-500 hover:text-white transition-colors duration-200 clickable-btn">
+                            ⚙️ 系統配置
+                        </button>
+                    </div>
                     
                     <div className="space-y-4 mt-4">
                         <div>
@@ -986,12 +1113,22 @@
                 }
 
                 switch(view) {
+                    case 'config':
+                        return <ConfigPage onBack={() => setView('order')} />;
                     case 'history':
                         return <HistoryPage onBack={() => setView('order')} showNotification={showNotification} />;
                     case 'success':
                         return submittedOrder && <SuccessPage orderData={submittedOrder} onNewOrder={handleNewOrder} showNotification={showNotification} />;
                     default:
-                        return <OrderPage menuItems={menuItems} onSubmitOrder={handleSubmitOrder} showNotification={showNotification} onViewHistory={() => setView('history')} />;
+                        return (
+                            <OrderPage 
+                                menuItems={menuItems} 
+                                onSubmitOrder={handleSubmitOrder} 
+                                showNotification={showNotification} 
+                                onViewHistory={() => setView('history')}
+                                onViewConfig={() => setView('config')}
+                            />
+                        );
                 }
             };
 
@@ -1000,6 +1137,11 @@
                     <div className="container max-w-md mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden">
                         <div className="bg-[#fff3cd] border border-[#ffeaa7] rounded-t-2xl p-2.5 text-xs text-center text-[#856404]">
                             <span role="img" aria-label="lock">🔒</span> 安全訂餐系統 - 24小時接受預訂
+                            {!LIFF_ID && (
+                                <div className="text-red-600 font-bold mt-1">
+                                    ❌ 請配置 LIFF ID
+                                </div>
+                            )}
                         </div>
 
                         <header className="bg-green-500 text-white p-5 text-center relative">
@@ -1019,6 +1161,7 @@
                         
                         <footer className="bg-gray-100 p-4 text-center text-xs text-gray-500 border-t border-gray-200">
                             <p>📍 營業時間: 10:00 - 21:00 | 📞 聯絡電話: 02-1234-5678</p>
+                            <p className="mt-1">使用 URL 參數配置: ?liff_id=YOUR_ID&api_endpoint=YOUR_URL</p>
                         </footer>
                     </div>
                 </div>
